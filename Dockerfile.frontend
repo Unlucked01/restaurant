@@ -1,0 +1,19 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package.json and install dependencies
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+
+# Copy the rest of the application
+COPY frontend/ .
+
+# Create .next directory with correct permissions
+RUN mkdir -p .next && chmod -R 777 .next
+
+# Expose port
+EXPOSE 3000
+
+# Start the Next.js dev server
+CMD ["npm", "run", "dev"] 
