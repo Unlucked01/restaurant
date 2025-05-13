@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env.prod
+    environment:
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_DB=${DB_NAME:-restaurant}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - restaurant-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.backend.prod
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.prod
+    volumes:
+      - ./backend/uploads:/app/uploads
+    environment:
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@restaurant.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-adminpassword}
+      - ADMIN_FIRST_NAME=${ADMIN_FIRST_NAME:-Admin}
+      - ADMIN_LAST_NAME=${ADMIN_LAST_NAME:-User}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-restaurant}
+      - DB_HOST=db
+      - DB_PORT=5432
+      - ALLOW_PUBLIC_ACCESS=true
+      - CORS_ORIGINS=http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - restaurant-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile.frontend.prod
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.prod
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - TZ=Europe/Moscow
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - restaurant-network
+
+volumes:
+  postgres_data:
+
+networks:
+  restaurant-network:
+    driver: bridge
