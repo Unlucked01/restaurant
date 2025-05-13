@@ -36,26 +36,6 @@ api.interceptors.response.use(
       }
     }
     
-    // Translate common error messages
-    if (error.response && error.response.data && error.response.data.detail) {
-      const detail = error.response.data.detail;
-      
-      // Handle specific error messages
-      if (typeof detail === 'string') {
-        if (detail.includes('Table is already reserved') || detail.includes('Table not available')) {
-          error.response.data.detail = 'Столик уже забронирован на это время';
-        } else if (detail.includes('not found')) {
-          error.response.data.detail = 'Ресурс не найден';
-        } else if (detail.includes('Invalid credentials')) {
-          error.response.data.detail = 'Неверные учетные данные';
-        } else if (detail.includes('Inactive user')) {
-          error.response.data.detail = 'Учетная запись не активирована';
-        } else if (detail.includes('past date')) {
-          error.response.data.detail = 'Нельзя бронировать на прошедшую дату';
-        }
-      }
-    }
-    
     return Promise.reject(error);
   }
 );
@@ -96,6 +76,8 @@ export const reservationsAPI = {
   getReservationById: (id: string) => api.get(`/reserve/${id}`),
   deleteReservation: (id: string) => api.delete(`/reserve/${id}`),
   updateReservation: (id: string, reservationData: any) => api.put(`/reserve/${id}`, reservationData),
+  updateReservationStatus: (id: string, status: string) => 
+    api.patch(`/reserve/${id}/status`, { status }),
 };
 
 // Menu API

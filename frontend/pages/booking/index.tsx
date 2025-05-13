@@ -8,6 +8,7 @@ import ReservationTable from '../../components/ReservationTable';
 import ReservationWall from '../../components/ReservationWall';
 import StaticItem from '../../components/StaticItem';
 import { useRouter } from 'next/router';
+import { useAuth } from '../../context/AuthContext';
 
 export default function BookingPage() {
   const [tables, setTables] = useState<any[]>([]);
@@ -21,7 +22,16 @@ export default function BookingPage() {
     const today = new Date();
     return today.toISOString().split('T')[0];
   });
-  const [time, setTime] = useState('12:00');
+  const [time, setTime] = useState(() => {
+    // Get the next available hour for today
+    const now = new Date();
+    const currentHour = now.getHours();
+    // If it's after 23:00, default to 12:00 (for the next day)
+    // Otherwise, use the next hour after current hour (if available)
+    const nextHour = currentHour >= 23 ? 12 : currentHour + 1;
+    // Only use times between 12 and 23
+    return nextHour >= 12 && nextHour < 24 ? `${nextHour}:00` : '12:00';
+  });
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [reservedTables, setReservedTables] = useState<string[]>([]);
   const [modalKey, setModalKey] = useState(0);
@@ -33,16 +43,26 @@ export default function BookingPage() {
   const router = useRouter();
   const { edit: editReservationId, date: urlDate, time: urlTime, tableId: urlTableId, guests: urlGuests } = router.query;
   const [isEditMode, setIsEditMode] = useState(false);
+  const { user, loading: authLoading } = useAuth();
 
   useEffect(() => {
-    fetchLayout();
-  }, []);
+    // Redirect if not logged in
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
 
   useEffect(() => {
-    if (date && time) {
+    if (user) {
+      fetchLayout();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (date && time && user) {
       fetchAvailability();
     }
-  }, [date, time]);
+  }, [date, time, user]);
 
   useEffect(() => {
     if (editReservationId) {
@@ -58,7 +78,25 @@ export default function BookingPage() {
       
       if (urlTime) {
         const formattedTime = urlTime.toString().substring(0, 5);
-        setTime(formattedTime);
+        // Check if the time is valid for today
+        if (urlDate === new Date().toISOString().split('T')[0]) {
+          const now = new Date();
+          const currentHour = now.getHours();
+          const timeHour = parseInt(formattedTime.split(':')[0], 10);
+          
+          // Only set the time if it's after the current hour
+          if (timeHour > currentHour) {
+            setTime(formattedTime);
+          } else {
+            // Set to next available hour
+            const nextHour = currentHour >= 23 ? 12 : currentHour + 1;
+            const validTime = nextHour >= 12 && nextHour < 24 ? `${nextHour}:00` : '12:00';
+            setTime(validTime);
+          }
+        } else {
+          // Not today, so any time is valid
+          setTime(formattedTime);
+        }
       }
       
       if (urlGuests) {
@@ -252,14 +290,30 @@ export default function BookingPage() {
                   onChange={handleTimeChange}
                   className="border rounded px-3 py-2"
                 >
-                  {Array.from({ length: 12 }, (_, i) => {
-                    const hour = i + 12;
-                    return hour < 24 ? `${hour}:00` : null;
-                  }).filter(Boolean).map((timeSlot) => (
-                    <option key={timeSlot} value={timeSlot}>
-                      {timeSlot}
-                    </option>
-                  ))}
+                  {(() => {
+                    // Generate time slots from 12:00 to 23:00
+                    let timeSlots = Array.from({ length: 12 }, (_, i) => {
+                      const hour = i + 12;
+                      return hour < 24 ? `${hour}:00` : null;
+                    }).filter(Boolean);
+                    
+                    // Filter out times up to and including current hour for same-day reservations
+                    if (date === new Date().toISOString().split('T')[0]) {
+                      const now = new Date();
+                      const currentHour = now.getHours();
+                      
+                      timeSlots = timeSlots.filter(timeSlot => {
+                        const [hour] = timeSlot.split(':').map(Number);
+                        return hour > currentHour;
+                      });
+                    }
+                    
+                    return timeSlots.map((timeSlot) => (
+                      <option key={timeSlot} value={timeSlot}>
+                        {timeSlot}
+                      </option>
+                    ));
+                  })()}
                 </select>
               </div>
             </div>
@@ -288,11 +342,13 @@ export default function BookingPage() {
             </div>
           ) : (
             <div className="bg-white p-6 rounded-lg shadow overflow-auto" ref={layoutContainerRef}>
-              <div className="relative h-full w-full" style={{ 
-                margin: '0 auto', 
+              <div className="border relative" style={{ 
+                width: '100%', 
+                height: '80vh', 
+                margin: '0 auto',
                 backgroundColor: '#f9fafb',
-                minHeight: '600px',
-                paddingBottom: '2rem'
+                minWidth: '800px',
+                minHeight: '600px'
               }}>
                 {/* Walls */}
                 {walls.map((wall) => (

@@ -8,12 +8,13 @@ from utils.security import get_current_user, get_current_admin
 from db.models import User, Reservation, Table, OrderItem, TableType
 from schemas.reservation import (
     ReservationCreate, ReservationRead, ReservationEnhanced,
-    TableAvailability, AvailabilityQuery, ReservationStats
+    TableAvailability, AvailabilityQuery, ReservationStats,
+    ReservationStatusUpdate
 )
 from .services import (
     get_available_tables, create_reservation, get_reservations_by_date, 
     get_reservation_statistics, get_user_reservations,
-    get_reservation_by_id, update_reservation
+    get_reservation_by_id, update_reservation, update_reservation_status
 )
 
 router = APIRouter()
@@ -49,7 +50,7 @@ def check_tables_availability(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid date or time format. Use YYYY-MM-DD for date and HH:MM for time."
+            detail="Неверный формат даты или времени. Используйте ГГГГ-ММ-ДД для даты и ЧЧ:ММ для времени."
         )
 
 
@@ -82,6 +83,7 @@ def get_reservations(
                     "first_name": reservation.first_name,
                     "last_name": reservation.last_name,
                     "phone": reservation.phone,
+                    "status": reservation.status,
                     "table": {
                         "id": str(table.id),
                         "type_id": table.type_id,
@@ -111,7 +113,7 @@ def get_reservations(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid date format. Use YYYY-MM-DD for date."
+            detail="Неверный формат даты. Используйте ГГГГ-ММ-ДД для даты."
         )
 
 
@@ -137,7 +139,7 @@ def get_enhanced_reservations(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid date format. Use YYYY-MM-DD for date."
+            detail="Неверный формат даты. Используйте ГГГГ-ММ-ДД для даты."
         )
 
 
@@ -173,7 +175,7 @@ def get_reservation_details(
     if current_user.role != "admin" and reservation.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view this reservation"
+            detail="У вас нет прав для просмотра этого бронирования"
         )
     
     return reservation
@@ -192,14 +194,14 @@ def update_reservation_details(
     if not reservation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reservation not found"
+            detail="Бронирование не найдено"
         )
     
     # Check if the user is authorized to update this reservation
     if current_user.role != "admin" and reservation.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to update this reservation"
+            detail="У вас нет прав для изменения этого бронирования"
         )
     
     # Update the reservation
@@ -239,4 +241,31 @@ def delete_reservation(
     session.delete(reservation)
     session.commit()
     
-    return None 
+    return None
+
+
+@router.patch("/{reservation_id}/status", response_model=ReservationEnhanced)
+def update_status(
+    reservation_id: UUID,
+    status_data: ReservationStatusUpdate,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """Update just the status of a reservation"""
+    # First get the existing reservation
+    reservation = session.get(Reservation, reservation_id)
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Бронирование не найдено"
+        )
+    
+    # Check if the user is authorized to update this reservation
+    if current_user.role != "admin" and reservation.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="У вас нет прав для изменения этого бронирования"
+        )
+    
+    # Update the reservation status
+    return update_reservation_status(reservation_id, status_data.status, session) 

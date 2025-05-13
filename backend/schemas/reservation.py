@@ -11,6 +11,7 @@ class ReservationBase(BaseModel):
     first_name: str
     last_name: str
     phone: str
+    status: Optional[str] = "pending"
 
 
 class ReservationCreate(ReservationBase):
@@ -62,4 +63,8 @@ class ReservationStats(BaseModel):
     total_reservations: int
     reservations_by_date: Dict[str, int]
     reservations_by_table: Dict[str, int]
-    average_guests: float 
+    average_guests: float
+
+
+class ReservationStatusUpdate(BaseModel):
+    status: str 

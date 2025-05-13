@@ -22,6 +22,16 @@ const Navbar: React.FC = () => {
     closeSidebar();
   };
 
+  const handleBookingClick = (e) => {
+    e.preventDefault();
+    if (!user) {
+      router.push('/login');
+    } else {
+      router.push('/booking');
+    }
+    closeSidebar();
+  };
+
   return (
     <>
       {/* Header */}
@@ -91,15 +101,15 @@ const Navbar: React.FC = () => {
                 </Link>
               </li>
               <li>
-                <Link
-                  href="/booking"
+                <a
+                  href="#"
                   className={`block py-2 px-4 rounded ${
                     router.pathname === '/booking' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
                   }`}
-                  onClick={closeSidebar}
+                  onClick={handleBookingClick}
                 >
                   Забронировать стол
-                </Link>
+                </a>
               </li>
               
               {user && (

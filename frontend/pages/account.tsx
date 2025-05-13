@@ -48,6 +48,11 @@ const AccountPage: React.FC = () => {
   };
 
   const handleEditReservation = (id: string) => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    
     // Find reservation to edit
     const reservation = reservations.find(r => r.id === id);
     if (reservation) {
@@ -142,7 +147,13 @@ const AccountPage: React.FC = () => {
                 <div className="py-8 text-center border-2 border-dashed rounded-lg">
                   <p className="text-gray-500 mb-2">У вас пока нет бронирований</p>
                   <button
-                    onClick={() => router.push('/booking')}
+                    onClick={() => {
+                      if (!user) {
+                        router.push('/login');
+                      } else {
+                        router.push('/booking');
+                      }
+                    }}
                     className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
                   >
                     Забронировать столик

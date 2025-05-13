@@ -49,6 +49,7 @@ const ReservationsManager: React.FC = () => {
   const [reservationStats, setReservationStats] = useState<ReservationStats | null>(null);
   const [orderStats, setOrderStats] = useState<OrderStats | null>(null);
   const [statsPeriod, setStatsPeriod] = useState<string>('week');
+  const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
   
   // Fetch reservations for selected date
   useEffect(() => {
@@ -228,6 +229,40 @@ const ReservationsManager: React.FC = () => {
     },
   };
 
+  // Handle reservation deletion
+  const handleDeleteReservation = async (id: string) => {
+    if (window.confirm('Вы уверены, что хотите удалить это бронирование?')) {
+      try {
+        await reservationsAPI.deleteReservation(id);
+        // Refresh reservations after deletion
+        const response = await reservationsAPI.getAllReservations(selectedDate);
+        setReservations(response.data);
+      } catch (err) {
+        console.error('Failed to delete reservation:', err);
+        setError('Не удалось удалить бронирование');
+      }
+    }
+  };
+
+  // Handle reservation status update
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      setStatusUpdating(id);
+      
+      // Use the new endpoint to update just the status
+      await reservationsAPI.updateReservationStatus(id, newStatus);
+      
+      // Refresh reservations after update
+      const updatedResponse = await reservationsAPI.getAllReservations(selectedDate);
+      setReservations(updatedResponse.data);
+    } catch (err) {
+      console.error('Failed to update reservation status:', err);
+      setError('Не удалось обновить статус бронирования');
+    } finally {
+      setStatusUpdating(null);
+    }
+  };
+
   return (
     <div className="reservations-manager">
       {error && (
@@ -332,6 +367,17 @@ const ReservationsManager: React.FC = () => {
                 </div>
               </div>
               
+              <div className="mb-4">
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-sm text-gray-500">Средний чек</div>
+                  <div className="text-2xl font-semibold">
+                    {orderStats && orderStats.total_orders > 0 
+                      ? `${(orderStats.total_revenue / orderStats.total_orders).toLocaleString('ru-RU')} ₽` 
+                      : '0 ₽'}
+                  </div>
+                </div>
+              </div>
+              
               <div className="h-80">
                 <h4 className="text-sm font-medium mb-2">Продажи блюд</h4>
                 <Pie data={dishSalesData} />
@@ -408,11 +454,23 @@ const ReservationsManager: React.FC = () => {
                       {reservation.phone}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                        {reservation.status === 'confirmed' ? 'Подтверждено' :
-                         reservation.status === 'pending' ? 'Ожидание' :
-                         reservation.status || 'Ожидание'}
-                      </span>
+                      {statusUpdating === reservation.id ? (
+                        <span className="text-xs">Обновление...</span>
+                      ) : (
+                        <select
+                          className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                            reservation.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                            reservation.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}
+                          value={reservation.status || 'pending'}
+                          onChange={(e) => handleStatusChange(reservation.id, e.target.value)}
+                        >
+                          <option value="pending">Ожидание</option>
+                          <option value="confirmed">Подтверждено</option>
+                          <option value="cancelled">Отменено</option>
+                        </select>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       <div className="flex space-x-2">
@@ -443,12 +501,7 @@ const ReservationsManager: React.FC = () => {
                         <button 
                           className="p-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
                           title="Удалить"
-                          onClick={() => {
-                            // Handle delete
-                            if (confirm('Вы уверены, что хотите удалить бронирование?')) {
-                              alert('Удаление бронирования ' + reservation.id);
-                            }
-                          }}
+                          onClick={() => handleDeleteReservation(reservation.id)}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

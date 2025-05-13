@@ -71,7 +71,7 @@ async def get_me(token: str = Depends(oauth2_scheme), session: Session = Depends
         print(f"Error in /auth/me endpoint: {e}")
         raise HTTPException(
             status_code=401,
-            detail="Invalid authentication credentials",
+            detail="Необходима аутентификация",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

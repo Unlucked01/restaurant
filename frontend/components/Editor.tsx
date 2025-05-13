@@ -837,6 +837,8 @@ const LayoutEditor: React.FC = () => {
                         top: `${table.y}px`,
                         width: `${tableWidth}px`,
                         height: `${tableHeight}px`,
+                        transform: `rotate(${table.rotation || 0}deg)`,
+                        transformOrigin: 'center',
                         zIndex: selectedItem && selectedItem.itemType === 'table' && selectedItem.id === table.id ? 20 : 10,
                       }}
                       className={selectedItem && selectedItem.itemType === 'table' && selectedItem.id === table.id ? 'ring-2 ring-blue-500' : ''}

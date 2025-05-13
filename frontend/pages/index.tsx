@@ -9,6 +9,7 @@ import { CalendarIcon, MapPinIcon, ClockIcon, PhoneIcon } from '@heroicons/react
 import ReservationTable from '../components/ReservationTable';
 import ReservationWall from '../components/ReservationWall';
 import StaticItem from '../components/StaticItem';
+import { useAuth } from '../context/AuthContext';
 
 
 export default function Home() {
@@ -20,7 +21,16 @@ export default function Home() {
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [maxGuests, setMaxGuests] = useState(4);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [time, setTime] = useState('12:00');
+  const [time, setTime] = useState(() => {
+    // Get the next available hour for today
+    const now = new Date();
+    const currentHour = now.getHours();
+    // If it's after 23:00, default to 12:00 (for the next day)
+    // Otherwise, use the next hour after current hour (if available)
+    const nextHour = currentHour >= 23 ? 12 : currentHour + 1;
+    // Only use times between 12 and 23
+    return nextHour >= 12 && nextHour < 24 ? `${nextHour}:00` : '12:00';
+  });
   const [tableSizes, setTableSizes] = useState<Record<string, { width: number; height: number }>>(
     {}
   );
@@ -31,6 +41,7 @@ export default function Home() {
   const layoutContainerRef = useRef(null);
 
   const router = useRouter();
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchLayout();
@@ -154,6 +165,11 @@ export default function Home() {
   };
 
   const handleTableClick = (tableId: string, maxGuests: number) => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    
     if (reservedTables.includes(tableId)) {
       return; // Table is already reserved
     }
@@ -199,12 +215,16 @@ export default function Home() {
                 </Link>
                 <button
                   onClick={() => {
-                    const layoutSection = document.getElementById('reservation-section');
-                    if (layoutSection) {
-                      layoutSection.scrollIntoView({ behavior: 'smooth' });
+                    if (!user) {
+                      router.push('/login');
+                    } else {
+                      const layoutSection = document.getElementById('reservation-section');
+                      if (layoutSection) {
+                        layoutSection.scrollIntoView({ behavior: 'smooth' });
+                      }
                     }
                   }}
-                  className="px-6 py-3 border border-blue-500 text-gray-300 rounded-md hover:bg-blue-50 transition"
+                  className="px-6 py-3 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700 transition"
                 >
                   Забронировать стол
                 </button>
@@ -314,14 +334,30 @@ export default function Home() {
                     onChange={handleTimeChange}
                     className="border rounded px-3 py-2"
                   >
-                    {Array.from({ length: 12 }, (_, i) => {
-                      const hour = i + 12;
-                      return hour < 24 ? `${hour}:00` : null;
-                    }).filter(Boolean).map((timeSlot) => (
-                      <option key={timeSlot} value={timeSlot}>
-                        {timeSlot}
-                      </option>
-                    ))}
+                    {(() => {
+                      // Generate time slots from 12:00 to 23:00
+                      let timeSlots = Array.from({ length: 12 }, (_, i) => {
+                        const hour = i + 12;
+                        return hour < 24 ? `${hour}:00` : null;
+                      }).filter(Boolean);
+                      
+                      // Filter out times up to and including current hour for same-day reservations
+                      if (date === new Date().toISOString().split('T')[0]) {
+                        const now = new Date();
+                        const currentHour = now.getHours();
+                        
+                        timeSlots = timeSlots.filter(timeSlot => {
+                          const [hour] = timeSlot.split(':').map(Number);
+                          return hour > currentHour;
+                        });
+                      }
+                      
+                      return timeSlots.map((timeSlot) => (
+                        <option key={timeSlot} value={timeSlot}>
+                          {timeSlot}
+                        </option>
+                      ));
+                    })()}
                   </select>
                 </div>
               </div>
@@ -340,12 +376,18 @@ export default function Home() {
               </div>
 
               <div className="mt-6 pt-4 border-t border-gray-200 text-center">
-                <Link
-                  href="/booking"
+                <button
+                  onClick={() => {
+                    if (!user) {
+                      router.push('/login');
+                    } else {
+                      router.push('/booking');
+                    }
+                  }}
                   className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                 >
                   Просмотреть все столики
-                </Link>
+                </button>
               </div>
             </div>
 
@@ -355,12 +397,13 @@ export default function Home() {
               </div>
             ) : (
               <div className="bg-white p-6 rounded-lg shadow overflow-auto" ref={layoutContainerRef}>
-                <div className="relative" style={{ 
-                  width: `${1200 * scale}px`, 
-                  height: `${600 * scale}px`, 
+                <div className="border relative" style={{ 
+                  width: '100%', 
+                  height: '80vh', 
                   margin: '0 auto', 
                   backgroundColor: '#f9fafb',
-                  transformOrigin: 'top left'
+                  minWidth: '800px',
+                  minHeight: '600px'
                 }}>
                   {/* Walls */}
                   {walls.map((wall) => (

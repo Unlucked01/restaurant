@@ -32,12 +32,10 @@ const ReservationTable: React.FC<TableProps> = ({
   onClick,
   scale = 1,
 }) => {
-  // Debug log to check isReserved value
+  // Debug log to check values
   useEffect(() => {
-    if (isReserved) {
-      console.log(`Table ${id} (${table_number}) is reserved:`, isReserved);
-    }
-  }, [id, table_number, isReserved]);
+    console.log(`Table ${id} (${table_number}): x=${x}, y=${y}, rotation=${rotation}, type=${type_name}, isReserved=${isReserved}`);
+  }, [id, table_number, x, y, rotation, type_name, isReserved]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -50,57 +48,68 @@ const ReservationTable: React.FC<TableProps> = ({
     }
   };
 
-  // Determine table dimensions based on type
+  // Get table dimensions
   const getTableDimensions = () => {
-    // Use props width/height if provided
     if (propWidth && propHeight) {
       return { width: propWidth, height: propHeight };
     }
     
-    // Set dimensions based on table type
-    const tableType = type_name.toLowerCase();
-    
+    // Default dimensions based on table type
+    const tableType = type_name && typeof type_name === 'string'
+      ? type_name.toLowerCase()
+      : '';
+      
     switch (tableType) {
       case 'circular':
+        return { width: 64, height: 64 };
       case 'circular-large':
-        // Make circular tables square (equal width and height)
-        return { width: 50, height: 50 };
+        return { width: 80, height: 80 };
       case 'rectangular':
-        // Make rectangular tables wider than tall
-        return { width: 80, height: 40 };
+        return { width: 144, height: 64 };
       case 'vip':
-        return { width: 100, height: 100 };
+        return { width: 192, height: 192 };
       case 'banquet':
-        return { width: 150, height: 70 };
+        return { width: 200, height: 100 };
       default:
-        return { width: 50, height: 50 };
+        return { width: 64, height: 64 };
     }
   };
 
   const { width, height } = getTableDimensions();
+  
+  // Логируем итоговые значения размеров
+  console.log(`Table ${id}: final dimensions - width=${width}, height=${height}`);
+
+  // Координаты стола для масштабирования
+  // Позиционирование как в админке: стол размещается верхним левым углом в точке (x,y)
+  // и центрируется с помощью transformOrigin
+  const scaledX = x * scale;
+  const scaledY = y * scale;
 
   return (
     <div
       style={{
         position: 'absolute',
-        left: `${x * scale}px`,
-        top: `${y * scale}px`,
+        left: `${scaledX}px`,
+        top: `${scaledY}px`,
         width: `${width * scale}px`,
         height: `${height * scale}px`,
-        transform: `scale(${scale}) rotate(${rotation || 0}deg)`,
-        transformOrigin: 'top left',
+        transform: `rotate(${rotation || 0}deg)`,
+        transformOrigin: 'center',
         cursor: isReserved ? 'not-allowed' : 'pointer',
         zIndex: 10,
       }}
       onClick={handleClick}
       className={isReserved ? 'reservation-reserved' : 'reservation-available'}
     >
-      {renderTableByType({
-        type_name,
-        table_number,
-        maxGuests,
-        isReserved
-      })}
+      <div style={{ width: '100%', height: '100%' }}>
+        {renderTableByType({
+          type_name,
+          table_number,
+          maxGuests,
+          isReserved
+        })}
+      </div>
     </div>
   );
 };

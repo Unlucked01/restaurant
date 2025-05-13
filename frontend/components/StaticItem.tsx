@@ -34,6 +34,8 @@ const StaticItem: React.FC<StaticItemProps> = ({
         return { width: 120, height: 80 };
       case 'wardrobe':
         return { width: 80, height: 80 };
+      case 'window':
+        return { width: 100, height: 50 };
       default:
         return { width: 80, height: 80 };
     }
@@ -43,16 +45,20 @@ const StaticItem: React.FC<StaticItemProps> = ({
   const finalWidth = width || defaultSize.width;
   const finalHeight = height || defaultSize.height;
   
+  // Координаты с учетом масштаба
+  const scaledX = x * scale;
+  const scaledY = y * scale;
+  
   return (
     <div
       style={{
         position: 'absolute',
-        left: `${x * scale}px`,
-        top: `${y * scale}px`,
+        left: `${scaledX}px`,
+        top: `${scaledY}px`,
         width: `${finalWidth * scale}px`,
         height: `${finalHeight * scale}px`,
-        transform: `scale(${scale}) rotate(${rotation}deg)`,
-        transformOrigin: 'top left',
+        transform: `rotate(${rotation}deg)`,
+        transformOrigin: 'center',
         zIndex: 5,
       }}
       className="shadow-md"

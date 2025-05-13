@@ -19,29 +19,24 @@ const ReservationWall: React.FC<WallProps> = ({
   width = 8,
   scale = 1,
 }) => {
-  // Adjust position based on wall orientation to ensure proper centering
-  let adjustedX = x;
-  let adjustedY = y;
+  // Debug log для отладки
+  console.log(`Wall ${id}: x=${x}, y=${y}, rotation=${rotation}, length=${length}`);
   
-  // For vertical walls (90° or -90°)
-  if (Math.abs(Math.abs(rotation) - 90) < 0.5) {
-    adjustedX = x - width / 2; // Half of wall thickness to center it on the point
-  }
-  // For horizontal walls (0° or 180°)
-  else if (Math.abs(rotation) < 0.5 || Math.abs(Math.abs(rotation) - 180) < 0.5) {
-    adjustedY = y - width / 2; // Half of wall thickness to center it on the point
-  }
-
+  // Координаты с учетом масштаба
+  const scaledX = x * scale;
+  const scaledY = y * scale;
+  const scaledLength = length * scale;
+  
   return (
     <div
       style={{
         position: 'absolute',
-        left: `${adjustedX * scale}px`,
-        top: `${adjustedY * scale}px`,
-        transform: `scale(${scale}) rotate(${rotation}deg)`,
-        transformOrigin: 'top left',
-        width: `${length}px`,
+        left: `${scaledX}px`,
+        top: `${scaledY}px`,
+        width: `${scaledLength}px`,
         height: `${width}px`,
+        transform: `rotate(${rotation}deg)`,
+        transformOrigin: 'top left',
         zIndex: 5,
       }}
       className="bg-gray-800 rounded-sm shadow-md"

@@ -87,6 +87,7 @@ class Reservation(SQLModel, table=True):
     first_name: str
     last_name: str
     phone: str
+    status: str = Field(default="pending")  # Possible values: "pending", "confirmed", "cancelled"
     
     user: User = Relationship(back_populates="reservations")
     table: Table = Relationship(back_populates="reservations")

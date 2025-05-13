@@ -26,13 +26,13 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
     if query_date < today:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot make reservations for past dates"
+            detail="Нельзя бронировать на прошедшую дату"
         )
     
     if query_date > max_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Reservations only available up to {max_date}"
+            detail=f"Бронирование возможно только до {max_date}"
         )
     
     # Get all active tables
@@ -103,13 +103,21 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
                     )
                 else:
                     # Banquet hall is free for the whole day
+                    available_times = TIME_SLOTS
+                    
+                    # For same-day reservations, filter out time slots up to and including current hour
+                    if query_date == today:
+                        now = datetime.now()
+                        current_hour = now.hour
+                        available_times = [t for t in available_times if t.hour > current_hour]
+                    
                     availability.append(
                         TableAvailability(
                             table_id=table.id,
                             type_id=table.type_id,
                             table_number=table.table_number,
-                            available=True,
-                            available_times=TIME_SLOTS
+                            available=len(available_times) > 0,
+                            available_times=available_times
                         )
                     )
             else:
@@ -125,6 +133,12 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
                 
                 reserved_times = {r.reservation_time for r in existing_reservations}
                 available_times = [t for t in TIME_SLOTS if t not in reserved_times]
+                
+                # For same-day reservations, filter out time slots up to and including current hour
+                if query_date == today:
+                    now = datetime.now()
+                    current_hour = now.hour
+                    available_times = [t for t in available_times if t.hour > current_hour]
                 
                 availability.append(
                     TableAvailability(
@@ -147,14 +161,25 @@ def create_reservation(reservation_data: ReservationCreate, user_id: UUID, sessi
     if reservation_data.reservation_date < today:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot make reservations for past dates"
+            detail="Нельзя бронировать на прошедшую дату"
         )
     
     if reservation_data.reservation_date > max_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Reservations only available up to {max_date}"
+            detail=f"Бронирование возможно только до {max_date}"
         )
+    
+    # For same-day reservations, check if time is after the current hour
+    if reservation_data.reservation_date == today:
+        now = datetime.now()
+        current_hour = now.hour
+        
+        if reservation_data.reservation_time.hour <= current_hour:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Бронирование возможно только на время позже текущего часа"
+            )
     
     # Check if table exists and is active
     table = session.exec(
@@ -169,14 +194,22 @@ def create_reservation(reservation_data: ReservationCreate, user_id: UUID, sessi
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Table not found or is inactive"
+            detail="Столик не найден или неактивен"
         )
     
     # Check if table has enough capacity
     if reservation_data.guests_count > table.max_guests:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Table can only accommodate up to {table.max_guests} guests"
+            detail=f"Столик вмещает максимум {table.max_guests} гостей"
+        )
+    
+    # Check minimum guests requirement (at least half of maximum capacity)
+    min_required_guests = table.max_guests // 2
+    if reservation_data.guests_count < min_required_guests:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Минимальное количество гостей для этого столика - {min_required_guests}"
         )
     
     # Check table availability based on table type
@@ -335,7 +368,8 @@ def get_user_reservations(user_id: UUID, session: Session):
             "guests_count": reservation.guests_count,
             "first_name": reservation.first_name,
             "last_name": reservation.last_name,
-            "phone": reservation.phone
+            "phone": reservation.phone,
+            "status": reservation.status
         }
         
         # Load the table
@@ -378,7 +412,7 @@ def get_reservation_by_id(reservation_id: UUID, session: Session):
     if not reservation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reservation not found"
+            detail="Бронирование не найдено"
         )
     
     # Create a reservation dictionary
@@ -391,7 +425,8 @@ def get_reservation_by_id(reservation_id: UUID, session: Session):
         "guests_count": reservation.guests_count,
         "first_name": reservation.first_name,
         "last_name": reservation.last_name,
-        "phone": reservation.phone
+        "phone": reservation.phone,
+        "status": reservation.status
     }
     
     # Load the table
@@ -433,8 +468,35 @@ def update_reservation(reservation_id: UUID, updated_data: ReservationCreate, se
     if not reservation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Reservation not found"
+            detail="Бронирование не найдено"
         )
+
+    # Validate date
+    today = date.today()
+    max_date = today + timedelta(days=MAX_DAYS_ADVANCE)
+    
+    if updated_data.reservation_date < today:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя бронировать на прошедшую дату"
+        )
+    
+    if updated_data.reservation_date > max_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Бронирование возможно только до {max_date}"
+        )
+    
+    # For same-day reservations, check if time is after the current hour
+    if updated_data.reservation_date == today:
+        now = datetime.now()
+        current_hour = now.hour
+        
+        if updated_data.reservation_time.hour <= current_hour:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Бронирование возможно только на время позже текущего часа"
+            )
     
     # Check if the new table exists and is active
     table = session.exec(
@@ -449,14 +511,22 @@ def update_reservation(reservation_id: UUID, updated_data: ReservationCreate, se
     if not table:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Table not found or is inactive"
+            detail="Столик не найден или неактивен"
         )
     
     # Check if table has enough capacity
     if updated_data.guests_count > table.max_guests:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Table can only accommodate up to {table.max_guests} guests"
+            detail=f"Столик вмещает максимум {table.max_guests} гостей"
+        )
+    
+    # Check minimum guests requirement (at least half of maximum capacity)
+    min_required_guests = table.max_guests // 2
+    if updated_data.guests_count < min_required_guests:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Минимальное количество гостей для этого столика - {min_required_guests}"
         )
     
     # Check availability based on table type
@@ -521,7 +591,8 @@ def update_reservation(reservation_id: UUID, updated_data: ReservationCreate, se
         "guests_count": reservation.guests_count,
         "first_name": reservation.first_name,
         "last_name": reservation.last_name,
-        "phone": reservation.phone
+        "phone": reservation.phone,
+        "status": reservation.status
     }
     
     # Add table information to the response
@@ -538,6 +609,69 @@ def update_reservation(reservation_id: UUID, updated_data: ReservationCreate, se
         # Add table type information if available
         if updated_table.type_id:
             table_type = session.get(TableType, updated_table.type_id)
+            if table_type:
+                table_dict["table_type"] = {
+                    "id": table_type.id,
+                    "name": table_type.name,
+                    "display_name": table_type.display_name,
+                    "default_width": table_type.default_width,
+                    "default_height": table_type.default_height,
+                    "default_max_guests": table_type.default_max_guests,
+                    "color_code": table_type.color_code
+                }
+        
+        reservation_dict["table"] = table_dict
+    
+    return reservation_dict
+
+
+def update_reservation_status(reservation_id: UUID, status: str, session: Session):
+    """
+    Update only the status of an existing reservation
+    """
+    # First, check if the reservation exists
+    reservation = session.get(Reservation, reservation_id)
+    if not reservation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Бронирование не найдено"
+        )
+    
+    # Update just the status
+    reservation.status = status
+    
+    session.add(reservation)
+    session.commit()
+    session.refresh(reservation)
+    
+    # Create a dictionary representation of the updated reservation
+    reservation_dict = {
+        "id": str(reservation.id),
+        "user_id": str(reservation.user_id),
+        "table_id": str(reservation.table_id),
+        "reservation_date": reservation.reservation_date,
+        "reservation_time": reservation.reservation_time,
+        "guests_count": reservation.guests_count,
+        "first_name": reservation.first_name,
+        "last_name": reservation.last_name,
+        "phone": reservation.phone,
+        "status": reservation.status
+    }
+    
+    # Add table information to the response
+    table = session.get(Table, reservation.table_id)
+    if table:
+        table_dict = {
+            "id": str(table.id),
+            "type_id": table.type_id,
+            "table_number": table.table_number,
+            "width": table.width,
+            "height": table.height
+        }
+        
+        # Add table type information if available
+        if table.type_id:
+            table_type = session.get(TableType, table.type_id)
             if table_type:
                 table_dict["table_type"] = {
                     "id": table_type.id,

@@ -77,12 +77,12 @@ const Table: React.FC<TableProps> = ({
     <div
       style={{
         position: 'absolute',
-        left: `${x * scale}px`,
-        top: `${y * scale}px`,
+        left: `${(x - (parseInt(width) / 2) / scale) * scale}px`,
+        top: `${(y - (parseInt(height) / 2) / scale) * scale}px`,
         width: width,
         height: height,
         transform: `scale(${scale}) rotate(${rotation}deg)`,
-        transformOrigin: 'top left',
+        transformOrigin: 'center',
         cursor: available || isEditing ? 'move' : 'not-allowed',
         zIndex: isSelected ? 20 : 10,
       }}

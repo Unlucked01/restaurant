@@ -393,6 +393,18 @@ export const renderStaticItem = (type: string): JSX.Element => {
         </div>
       );
       
+    case 'window':
+      return (
+        <div className="w-full h-full border border-gray-300 rounded flex items-center justify-center">
+          <div className="grid grid-cols-2 gap-1 w-full h-full p-1">
+            <div className="border border-gray-400 bg-blue-50 opacity-70"></div>
+            <div className="border border-gray-400 bg-blue-50 opacity-70"></div>
+            <div className="border border-gray-400 bg-blue-50 opacity-70"></div>
+            <div className="border border-gray-400 bg-blue-50 opacity-70"></div>
+          </div>
+        </div>
+      );
+      
     default:
       return (
         <div className="w-full h-full bg-gray-100 border border-gray-300 flex items-center justify-center">

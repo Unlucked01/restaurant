@@ -90,6 +90,12 @@ export const LAYOUT_COMPONENTS: LayoutComponent[] = [
     isTable: false
   },
   {
+    type: 'window',
+    title: 'Окно',
+    scale: 'scale-75',
+    isTable: false
+  },
+  {
     type: 'wall',
     title: 'Стена',
     scale: 'scale-75',
@@ -204,6 +210,17 @@ export const renderComponentPreview = (component: LayoutComponent): JSX.Element 
         <div className="w-24 h-16 bg-amber-100 border-2 border-amber-600 flex flex-col items-center justify-center">
           <div className="text-amber-800 font-bold text-xs">Кухня</div>
           <div className="text-xs text-center text-amber-600">служебная зона</div>
+        </div>
+      );
+    case 'window':
+      return (
+        <div className="w-24 h-16 border border-gray-300 rounded flex items-center justify-center">
+          <div className="grid grid-cols-2 gap-1 w-full h-full p-1">
+            <div className="border border-gray-400 bg-blue-50 opacity-70"></div>
+            <div className="border border-gray-400 bg-blue-50 opacity-70"></div>
+            <div className="border border-gray-400 bg-blue-50 opacity-70"></div>
+            <div className="border border-gray-400 bg-blue-50 opacity-70"></div>
+          </div>
         </div>
       );
     case 'wall':

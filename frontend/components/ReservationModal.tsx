@@ -3,6 +3,7 @@ import { reservationsAPI, authAPI } from '../lib/api';
 import MenuOrderModal from './MenuOrderModal';
 import { useAuth } from '../context/AuthContext';
 import { formatPhoneNumber, normalizePhoneNumber, isValidPhoneNumber } from '../lib/formatters';
+import { isValidName, VALIDATION_ERRORS } from '../lib/validation';
 
 interface ReservationModalProps {
   tableId: string;
@@ -29,7 +30,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
   
   const [formData, setFormData] = useState({
     table_id: tableId,
-    guests_count: 1,
+    guests_count: Math.ceil(maxGuests / 2),
     first_name: '',
     last_name: '',
     phone: '',
@@ -40,6 +41,8 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [firstNameError, setFirstNameError] = useState<string | null>(null);
+  const [lastNameError, setLastNameError] = useState<string | null>(null);
   const [reservationComplete, setReservationComplete] = useState(false);
   const [newReservationId, setNewReservationId] = useState<string | null>(null);
   const [showMenuModal, setShowMenuModal] = useState(false);
@@ -120,6 +123,30 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
         // Only show error when user has entered a complete number
         setPhoneError('Введите номер в формате +7 (XXX) XXX-XX-XX');
       }
+    } else if (name === 'first_name') {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+      
+      // Validate first name
+      if (value && !isValidName(value)) {
+        setFirstNameError(VALIDATION_ERRORS.INVALID_NAME);
+      } else {
+        setFirstNameError(null);
+      }
+    } else if (name === 'last_name') {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+      
+      // Validate last name
+      if (value && !isValidName(value)) {
+        setLastNameError(VALIDATION_ERRORS.INVALID_NAME);
+      } else {
+        setLastNameError(null);
+      }
     } else {
       setFormData((prev) => ({
         ...prev,
@@ -137,6 +164,17 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
       return;
     }
     
+    // Validate names before submission
+    if (!isValidName(formData.first_name)) {
+      setFirstNameError(VALIDATION_ERRORS.INVALID_NAME);
+      return;
+    }
+    
+    if (!isValidName(formData.last_name)) {
+      setLastNameError(VALIDATION_ERRORS.INVALID_NAME);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -173,21 +211,11 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
     } catch (err: any) {
       console.error('Reservation failed:', err);
       
-      // Translate common errors to Russian
-      const errorMsg = err.response?.data?.detail || '';
+      const errorMsg = err.response?.data?.detail || err.response?.data?.message || '';
       console.log('Error message:', errorMsg);
       
-      if (errorMsg.includes('already reserved') || errorMsg.includes('not available')) {
-        setError('Этот столик уже забронирован на выбранное время');
-      } else if (errorMsg.includes('not found')) {
-        setError('Столик не найден');
-      } else if (errorMsg.includes('invalid date')) {
-        setError('Некорректная дата бронирования');
-      } else if (errorMsg.includes('in the past')) {
-        setError('Невозможно забронировать столик на прошедшую дату или время');
-      } else {
-        setError('Не удалось забронировать столик. Пожалуйста, попробуйте позже.');
-      }
+      // Используем сообщение об ошибке как есть, без дополнительной обработки
+      setError(errorMsg || 'Не удалось забронировать столик. Пожалуйста, попробуйте позже.');
     } finally {
       setLoading(false);
     }
@@ -206,11 +234,27 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
     onSuccess();
   };
 
-  // Generate time slots from 12:00 to 23:00
-  const timeSlots = Array.from({ length: 12 }, (_, i) => {
-    const hour = i + 12;
-    return hour < 24 ? `${hour}:00` : null;
-  }).filter(Boolean) as string[];
+  // Generate time slots from 12:00 to 23:00 with appropriate filtering for same-day reservations
+  const timeSlots = (() => {
+    // Get basic time slots
+    let slots = Array.from({ length: 12 }, (_, i) => {
+      const hour = i + 12;
+      return hour < 24 ? `${hour}:00` : null;
+    }).filter(Boolean) as string[];
+    
+    // If today's date is selected, filter out times up to and including current hour
+    if (formData.reservation_date === new Date().toISOString().split('T')[0]) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      
+      slots = slots.filter(timeSlot => {
+        const [hour] = timeSlot.split(':').map(Number);
+        return hour > currentHour;
+      });
+    }
+    
+    return slots;
+  })();
 
   if (showMenuModal && newReservationId) {
     return (
@@ -249,7 +293,10 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
                     className="w-full border rounded px-3 py-2 mt-1"
                     required
                   >
-                    {Array.from({ length: maxGuests }, (_, i) => i + 1).map((num) => (
+                    {Array.from(
+                      { length: maxGuests - Math.ceil(maxGuests / 2) + 1 }, 
+                      (_, i) => i + Math.ceil(maxGuests / 2)
+                    ).map((num) => (
                       <option key={num} value={num}>
                         {num}
                       </option>
@@ -301,9 +348,14 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
                     name="first_name"
                     value={formData.first_name}
                     onChange={handleChange}
-                    className="w-full border rounded px-3 py-2 mt-1"
+                    className={`w-full border rounded px-3 py-2 mt-1 ${
+                      firstNameError ? 'border-red-500' : ''
+                    }`}
                     required
                   />
+                  {firstNameError && (
+                    <p className="text-red-500 text-xs mt-1">{firstNameError}</p>
+                  )}
                 </label>
               </div>
               
@@ -315,9 +367,14 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
                     name="last_name"
                     value={formData.last_name}
                     onChange={handleChange}
-                    className="w-full border rounded px-3 py-2 mt-1"
+                    className={`w-full border rounded px-3 py-2 mt-1 ${
+                      lastNameError ? 'border-red-500' : ''
+                    }`}
                     required
                   />
+                  {lastNameError && (
+                    <p className="text-red-500 text-xs mt-1">{lastNameError}</p>
+                  )}
                 </label>
               </div>
               
