@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class ReservationBase(BaseModel):
     reservation_date: date
     reservation_time: time
+    duration: Optional[int] = 1  # Продолжительность в часах, по умолчанию 1 час
     guests_count: int
     first_name: str
     last_name: str
@@ -64,6 +65,7 @@ class ReservationStats(BaseModel):
     reservations_by_date: Dict[str, int]
     reservations_by_table: Dict[str, int]
     average_guests: float
+    average_duration: float
 
 
 class ReservationStatusUpdate(BaseModel):

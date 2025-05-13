@@ -4,6 +4,20 @@ from uuid import UUID, uuid4
 from sqlmodel import Field, SQLModel, Relationship
 
 
+class Room(SQLModel, table=True):
+    __tablename__ = "rooms"
+    
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    name: str = Field(index=True)
+    description: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    
+    tables: List["Table"] = Relationship(back_populates="room")
+    static_items: List["StaticItem"] = Relationship(back_populates="room")
+    walls: List["Wall"] = Relationship(back_populates="room")
+
+
 class TableType(SQLModel, table=True):
     __tablename__ = "table_types"
     
@@ -46,11 +60,12 @@ class Table(SQLModel, table=True):
     rotation: int = Field(default=0)
     width: Optional[int] = None
     height: Optional[int] = None
-    room_id: UUID = Field(default_factory=uuid4)
+    room_id: UUID = Field(foreign_key="rooms.id")
     is_active: bool = Field(default=True)  # Instead of deleting, tables can be marked inactive
     
     reservations: List["Reservation"] = Relationship(back_populates="table")
     table_type: TableType = Relationship(back_populates="tables")
+    room: Room = Relationship(back_populates="tables")
 
 
 class StaticItem(SQLModel, table=True):
@@ -61,7 +76,9 @@ class StaticItem(SQLModel, table=True):
     x: int
     y: int
     rotation: int = Field(default=0)
-    room_id: UUID
+    room_id: UUID = Field(foreign_key="rooms.id")
+    
+    room: Room = Relationship(back_populates="static_items")
 
 
 class Wall(SQLModel, table=True):
@@ -72,7 +89,9 @@ class Wall(SQLModel, table=True):
     y: int
     rotation: int = Field(default=0)
     length: int
-    room_id: UUID
+    room_id: UUID = Field(foreign_key="rooms.id")
+    
+    room: Room = Relationship(back_populates="walls")
 
 
 class Reservation(SQLModel, table=True):
@@ -83,6 +102,7 @@ class Reservation(SQLModel, table=True):
     table_id: UUID = Field(foreign_key="tables.id")
     reservation_date: date
     reservation_time: time
+    duration: int = Field(default=1)  # Продолжительность в часах, по умолчанию 1 час
     guests_count: int
     first_name: str
     last_name: str

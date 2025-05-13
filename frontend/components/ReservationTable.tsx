@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { renderTableByType } from './TableStyles';
 
 interface TableProps {
@@ -32,16 +32,11 @@ const ReservationTable: React.FC<TableProps> = ({
   onClick,
   scale = 1,
 }) => {
-  // Debug log to check values
-  useEffect(() => {
-    console.log(`Table ${id} (${table_number}): x=${x}, y=${y}, rotation=${rotation}, type=${type_name}, isReserved=${isReserved}`);
-  }, [id, table_number, x, y, rotation, type_name, isReserved]);
-
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onClick) {
       if (isReserved) {
-        console.log(`Attempted click on reserved table ${id} (${table_number})`);
+        // Table is reserved, do nothing
       } else {
         onClick(id, maxGuests);
       }
@@ -77,12 +72,6 @@ const ReservationTable: React.FC<TableProps> = ({
 
   const { width, height } = getTableDimensions();
   
-  // Логируем итоговые значения размеров
-  console.log(`Table ${id}: final dimensions - width=${width}, height=${height}`);
-
-  // Координаты стола для масштабирования
-  // Позиционирование как в админке: стол размещается верхним левым углом в точке (x,y)
-  // и центрируется с помощью transformOrigin
   const scaledX = x * scale;
   const scaledY = y * scale;
 

@@ -29,6 +29,7 @@ interface ReservationStats {
   reservations_by_date: Record<string, number>;
   reservations_by_table: Record<string, number>;
   average_guests: number;
+  average_duration: number;
 }
 
 interface OrderStats {
@@ -107,6 +108,7 @@ const ReservationsManager: React.FC = () => {
             'Столик 7': 20,
           },
           average_guests: 3.5,
+          average_duration: 1.5,
         };
         
         // Mock order stats data
@@ -333,6 +335,15 @@ const ReservationsManager: React.FC = () => {
                 </div>
               </div>
               
+              <div className="mb-4">
+                <div className="bg-gray-50 p-3 rounded">
+                  <div className="text-sm text-gray-500">Средняя продолжительность (часы)</div>
+                  <div className="text-2xl font-semibold">
+                    {reservationStats?.average_duration.toFixed(1) || 0}
+                  </div>
+                </div>
+              </div>
+              
               <div className="h-64 mb-4">
                 <h4 className="text-sm font-medium mb-2">Распределение бронирований по столикам</h4>
                 <Pie data={tableReservationsData} />
@@ -446,6 +457,12 @@ const ReservationsManager: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {reservation.reservation_time}
+                      {reservation.duration && (
+                        <span className="ml-1 text-xs text-gray-500">
+                          ({reservation.duration} {reservation.duration === 1 ? 'час' : 
+                           reservation.duration < 5 ? 'часа' : 'часов'})
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {reservation.guests_count}

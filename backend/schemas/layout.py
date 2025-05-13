@@ -1,6 +1,25 @@
 from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel
+from datetime import datetime
+
+
+class RoomBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class RoomCreate(RoomBase):
+    pass
+
+
+class RoomRead(RoomBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True
 
 
 class TableTypeBase(BaseModel):

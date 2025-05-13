@@ -40,10 +40,16 @@ export default function BookingPage() {
   const [scale, setScale] = useState(1);
   const layoutContainerRef = useRef(null);
 
+  // Добавляем состояние для хранения активной комнаты
+  const [activeRoom, setActiveRoom] = useState<any>(null);
+
   const router = useRouter();
   const { edit: editReservationId, date: urlDate, time: urlTime, tableId: urlTableId, guests: urlGuests } = router.query;
   const [isEditMode, setIsEditMode] = useState(false);
   const { user, loading: authLoading } = useAuth();
+
+  // Add state for duration
+  const [duration, setDuration] = useState(1);
 
   useEffect(() => {
     // Redirect if not logged in
@@ -54,15 +60,32 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (user) {
-      fetchLayout();
+      initializeRoomAndLayout();
     }
   }, [user]);
 
   useEffect(() => {
-    if (date && time && user) {
+    if (date && time && user && activeRoom) {
       fetchAvailability();
     }
-  }, [date, time, user]);
+  }, [date, time, user, activeRoom]);
+
+  // Новая функция для инициализации комнаты и макета
+  const initializeRoomAndLayout = async () => {
+    try {
+      setLoading(true);
+      // Получаем или создаем дефолтную комнату
+      const defaultRoom = await layoutAPI.getOrCreateDefaultRoom();
+      console.log('Default room:', defaultRoom);
+      setActiveRoom(defaultRoom);
+      
+      // Загружаем макет для этой комнаты
+      await fetchLayout(defaultRoom.id);
+    } catch (err) {
+      console.error('Failed to initialize room and layout:', err);
+      setError('Не удалось загрузить план зала. Пожалуйста, попробуйте позже.');
+    }
+  };
 
   useEffect(() => {
     if (editReservationId) {
@@ -131,11 +154,12 @@ export default function BookingPage() {
     };
   }, []);
 
-  const fetchLayout = async () => {
+  // Обновляем fetchLayout для работы с комнатой
+  const fetchLayout = async (roomId?: string) => {
     try {
       setLoading(true);
       setError(null);
-      const { data } = await layoutAPI.getLayout();
+      const { data } = await layoutAPI.getLayout(roomId);
       
       // Extract tables, static items, and walls from the layout data
       const { tables = [], static_items = [], walls = [] } = data;
@@ -176,7 +200,7 @@ export default function BookingPage() {
 
   const fetchAvailability = async () => {
     try {
-      const { data } = await reservationsAPI.getAvailability(date, time);
+      const { data } = await reservationsAPI.getAvailability(date, time, duration);
       console.log('Availability data:', data);
       
       // Check for the format in the pasted sample (array with table_id and available)
@@ -219,6 +243,10 @@ export default function BookingPage() {
 
   const handleTimeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setTime(e.target.value);
+  };
+
+  const handleDurationChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setDuration(parseInt(e.target.value, 10));
   };
 
   const handleTableClick = (tableId: string, maxGuests: number) => {
@@ -308,12 +336,36 @@ export default function BookingPage() {
                       });
                     }
                     
+                    // Filter out times that would extend past closing
+                    timeSlots = timeSlots.filter(timeSlot => {
+                      const [hour] = timeSlot.split(':').map(Number);
+                      return hour + duration <= 24;
+                    });
+                    
                     return timeSlots.map((timeSlot) => (
                       <option key={timeSlot} value={timeSlot}>
                         {timeSlot}
                       </option>
                     ));
                   })()}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-gray-700 mb-2 flex items-center">
+                  <ClockIcon className="h-5 w-5 mr-1 text-gray-500" />
+                  <span>Продолжительность:</span>
+                </label>
+                <select
+                  value={duration}
+                  onChange={handleDurationChange}
+                  className="border rounded px-3 py-2"
+                >
+                  {[1, 2, 3, 4, 5, 6].map((hours) => (
+                    <option key={hours} value={hours}>
+                      {hours} {hours === 1 ? 'час' : hours < 5 ? 'часа' : 'часов'}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -432,6 +484,7 @@ export default function BookingPage() {
             }}
             initialDate={date}
             initialTime={time}
+            initialDuration={duration}
             editMode={isEditMode}
             reservationId={editReservationId as string}
           />

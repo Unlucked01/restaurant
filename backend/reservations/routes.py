@@ -34,9 +34,10 @@ def create_new_reservation(
 def check_tables_availability(
     date: str = Query(..., description="Date to check availability for (YYYY-MM-DD)"),
     time: Optional[str] = Query(None, description="Optional time to filter availability (HH:MM)"),
+    duration: int = Query(1, description="Duration of the reservation in hours (1-6)", ge=1, le=6),
     session: Session = Depends(get_session)
 ):
-    """Check table availability for a specific date and optionally time"""
+    """Check table availability for a specific date, time and duration"""
     try:
         # Parse date string to date object
         parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
@@ -46,7 +47,7 @@ def check_tables_availability(
         if time:
             parsed_time = datetime.strptime(time, "%H:%M").time()
             
-        return get_available_tables(parsed_date, parsed_time, session)
+        return get_available_tables(parsed_date, parsed_time, duration, session)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

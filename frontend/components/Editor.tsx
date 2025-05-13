@@ -39,6 +39,14 @@ interface WallItem {
   length: number;
 }
 
+interface Room {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // Simple draggable component
 function Draggable({id, children}) {
   const {
@@ -90,6 +98,9 @@ const LayoutEditor: React.FC = () => {
   const [updateCounter, setUpdateCounter] = useState(0);
   const editorRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  
+  // Добавляем состояние для отслеживания активной комнаты
+  const [activeRoom, setActiveRoom] = useState<Room | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -99,8 +110,9 @@ const LayoutEditor: React.FC = () => {
     })
   );
 
+  // Инициализация: получаем или создаем дефолтную комнату, затем загружаем макет
   useEffect(() => {
-    fetchLayout();
+    initializeRoomAndLayout();
   }, []);
 
   useEffect(() => {
@@ -125,10 +137,30 @@ const LayoutEditor: React.FC = () => {
     };
   }, []);
 
-  const fetchLayout = async () => {
+  // Новая функция для инициализации комнаты и загрузки макета
+  const initializeRoomAndLayout = async () => {
     try {
       setLoading(true);
-      const response = await layoutAPI.getLayout();
+      
+      // Получаем или создаем дефолтную комнату
+      const defaultRoom = await layoutAPI.getOrCreateDefaultRoom();
+      setActiveRoom(defaultRoom);
+      
+      // Загружаем макет для этой комнаты
+      await fetchLayout(defaultRoom.id);
+    } catch (err) {
+      console.error('Failed to initialize room and layout:', err);
+      setError('Не удалось инициализировать зал');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Обновляем fetchLayout, чтобы принимать ID комнаты
+  const fetchLayout = async (roomId?: string) => {
+    try {
+      setLoading(true);
+      const response = await layoutAPI.getLayout(roomId);
       
       // Map type_id to proper type_name strings
       const mapTypeIdToName = (typeId) => {
@@ -375,8 +407,14 @@ const LayoutEditor: React.FC = () => {
     setSelectedItem(null);
   };
 
+  // Обновляем addTable для использования activeRoom
   const addTable = async (type: string) => {
     try {
+      if (!activeRoom) {
+        setError('Комната не инициализирована. Обновите страницу.');
+        return;
+      }
+
       // Obtain component details for defaults
       const tableComponent = LAYOUT_COMPONENTS.find(comp => comp.type === type && comp.isTable) as TableComponent;
       
@@ -435,7 +473,7 @@ const LayoutEditor: React.FC = () => {
       };
 
       console.log("Sending table data to server:", tableData);
-      const response = await layoutAPI.addTable(tableData);
+      const response = await layoutAPI.addTable(tableData, activeRoom.id);
       console.log("Server response:", response.data);
       
       // Add type_name for frontend rendering
@@ -454,8 +492,14 @@ const LayoutEditor: React.FC = () => {
     }
   };
 
+  // Обновляем addStaticItem для использования activeRoom
   const addStaticItem = async (type: string) => {
     try {
+      if (!activeRoom) {
+        setError('Комната не инициализирована. Обновите страницу.');
+        return;
+      }
+
       const itemData = {
         type,
         x: 150,
@@ -463,7 +507,7 @@ const LayoutEditor: React.FC = () => {
         rotation: 0,
       };
 
-      const response = await layoutAPI.addStaticItem(itemData);
+      const response = await layoutAPI.addStaticItem(itemData, activeRoom.id);
       setStaticItems([...staticItems, response.data]);
       setSelectedItem({ ...response.data, itemType: 'static' });
     } catch (err) {
@@ -566,8 +610,14 @@ const LayoutEditor: React.FC = () => {
     }
   };
   
+  // Обновляем addWall для использования activeRoom
   const addWall = async (x: number, y: number, rotation: number, length: number) => {
     try {
+      if (!activeRoom) {
+        setError('Комната не инициализирована. Обновите страницу.');
+        return;
+      }
+
       const wallData = {
         x,
         y,
@@ -575,7 +625,7 @@ const LayoutEditor: React.FC = () => {
         length,
       };
       
-      const response = await layoutAPI.addWall(wallData);
+      const response = await layoutAPI.addWall(wallData, activeRoom.id);
       setWalls([...walls, response.data]);
       setSelectedItem({ ...response.data, itemType: 'wall' });
       
@@ -589,10 +639,16 @@ const LayoutEditor: React.FC = () => {
     }
   };
   
+  // Обновляем clearLayout для использования activeRoom
   const clearLayout = async () => {
+    if (!activeRoom) {
+      setError('Комната не инициализирована. Обновите страницу.');
+      return;
+    }
+
     if (window.confirm('Вы уверены, что хотите очистить план зала? Все элементы будут удалены.')) {
       try {
-        await layoutAPI.clearLayout();
+        await layoutAPI.clearLayout(activeRoom.id);
         setTables([]);
         setStaticItems([]);
         setWalls([]);
@@ -605,8 +661,14 @@ const LayoutEditor: React.FC = () => {
     }
   };
 
+  // Обновляем saveLayout для использования activeRoom
   const saveLayout = async () => {
     try {
+      if (!activeRoom) {
+        setError('Комната не инициализирована. Обновите страницу.');
+        return;
+      }
+
       // Преобразуем таблицы для отправки на сервер
       const transformedTables = tables.map(({ id, ...rest }) => ({
         ...rest,
@@ -622,7 +684,7 @@ const LayoutEditor: React.FC = () => {
       // Отладочный вывод
       console.log('Saving layout:', JSON.stringify(layoutData));
 
-      await layoutAPI.saveLayout(layoutData);
+      await layoutAPI.saveLayout(layoutData, activeRoom.id);
       setError(null);
       alert('План зала сохранен успешно');
     } catch (err) {
@@ -644,12 +706,20 @@ const LayoutEditor: React.FC = () => {
     return <div className="p-8 text-center">Загрузка...</div>;
   }
 
+  // Добавляем информацию о текущей комнате
   return (
     <div className="flex flex-col max-w-[1400px] mx-auto px-4">
       {/* Error display */}
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}
+        </div>
+      )}
+
+      {/* Room information */}
+      {activeRoom && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-2 rounded mb-4">
+          Текущий зал: {activeRoom.name} {activeRoom.description ? `(${activeRoom.description})` : ''}
         </div>
       )}
 

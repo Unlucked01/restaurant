@@ -12,6 +12,7 @@ interface ReservationModalProps {
   onSuccess: () => void;
   initialDate?: string;
   initialTime?: string;
+  initialDuration?: number;
   editMode?: boolean;
   reservationId?: string;
 }
@@ -23,6 +24,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
   onSuccess,
   initialDate,
   initialTime,
+  initialDuration = 1,
   editMode = false,
   reservationId = '',
 }) => {
@@ -36,6 +38,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
     phone: '',
     reservation_date: initialDate || new Date().toISOString().split('T')[0],
     reservation_time: initialTime || '12:00',
+    duration: initialDuration,
   });
 
   const [loading, setLoading] = useState(false);
@@ -46,6 +49,9 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
   const [reservationComplete, setReservationComplete] = useState(false);
   const [newReservationId, setNewReservationId] = useState<string | null>(null);
   const [showMenuModal, setShowMenuModal] = useState(false);
+  const [timeSlots, setTimeSlots] = useState<string[]>([]);
+  const [suggestNextDay, setSuggestNextDay] = useState(false);
+  const [nextDayDate, setNextDayDate] = useState<string>('');
 
   // Auto-fill user data when component mounts
   useEffect(() => {
@@ -61,14 +67,15 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
 
   // Update form data if initialDate or initialTime props change
   useEffect(() => {
-    if (initialDate || initialTime) {
+    if (initialDate || initialTime || initialDuration) {
       setFormData(prev => ({
         ...prev,
         reservation_date: initialDate || prev.reservation_date,
         reservation_time: initialTime || prev.reservation_time,
+        duration: initialDuration || prev.duration,
       }));
     }
-  }, [initialDate, initialTime]);
+  }, [initialDate, initialTime, initialDuration]);
 
   // Fetch existing reservation data if in edit mode
   useEffect(() => {
@@ -76,6 +83,68 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
       fetchReservationDetails();
     }
   }, [editMode, reservationId]);
+
+  // Generate time slots whenever date or duration changes
+  useEffect(() => {
+    // Get basic time slots
+    let slots = Array.from({ length: 12 }, (_, i) => {
+      const hour = i + 12;
+      return hour < 24 ? `${hour}:00` : null;
+    }).filter(Boolean) as string[];
+    
+    // Only filter past hours if it's actually today
+    const currentDate = new Date();
+    const today = currentDate.toISOString().split('T')[0];
+    
+    // Check if the selected date is today
+    const isToday = formData.reservation_date === today;
+    
+    // Only filter times based on current hour if it's actually today
+    if (isToday) {
+      const currentHour = currentDate.getHours();
+      slots = slots.filter(timeSlot => {
+        const [hour] = timeSlot.split(':').map(Number);
+        return hour > currentHour;
+      });
+    }
+    
+    // Filter out slots that don't have enough time before closing (23:00)
+    // based on the selected duration
+    const maxStartHour = 24 - formData.duration;
+    slots = slots.filter(timeSlot => {
+      const [hour] = timeSlot.split(':').map(Number);
+      return hour <= maxStartHour;
+    });
+    
+    // If no slots are available for the current date, automatically move to the next day
+    if (slots.length === 0) {
+      // Calculate next day date
+      const currentDateObj = new Date(formData.reservation_date);
+      currentDateObj.setDate(currentDateObj.getDate() + 1);
+      const nextDay = currentDateObj.toISOString().split('T')[0];
+      
+      // Automatically update to next day
+      setFormData(prev => ({
+        ...prev,
+        reservation_date: nextDay,
+        reservation_time: '12:00', // Reset to earliest time
+        duration: 1  // Reset to 1 hour to ensure time slots are available
+      }));
+      
+      // Skip setting timeSlots as we're changing the date
+      return;
+    } else {
+      // If current selected time is no longer valid, select the first available time
+      if (!slots.includes(formData.reservation_time) && slots.length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          reservation_time: slots[0]
+        }));
+      }
+    }
+    
+    setTimeSlots(slots);
+  }, [formData.reservation_date, formData.duration]);
 
   const fetchReservationDetails = async () => {
     try {
@@ -96,6 +165,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
         phone: normalizedPhone,
         reservation_date: reservation.reservation_date,
         reservation_time: reservation.reservation_time.substring(0, 5),
+        duration: reservation.duration || 1,
       });
     } catch (err) {
       console.error('Failed to fetch reservation details:', err);
@@ -147,6 +217,12 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
       } else {
         setLastNameError(null);
       }
+    } else if (name === 'duration') {
+      // Make sure duration is stored as a number
+      setFormData((prev) => ({
+        ...prev,
+        [name]: parseInt(value, 10),
+      }));
     } else {
       setFormData((prev) => ({
         ...prev,
@@ -174,6 +250,12 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
       setLastNameError(VALIDATION_ERRORS.INVALID_NAME);
       return;
     }
+    
+    // Validate that there are available time slots and a time is selected
+    if (timeSlots.length === 0 || !formData.reservation_time) {
+      setError('Нет доступных временных слотов для выбранной даты и продолжительности. Пожалуйста, выберите другую дату или продолжительность.');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -183,6 +265,7 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
       const dataToSubmit = {
         ...formData,
         phone: normalizePhoneNumber(formData.phone),
+        duration: Number(formData.duration) // Ensure duration is a number
       };
     
       let response;
@@ -212,7 +295,6 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
       console.error('Reservation failed:', err);
       
       const errorMsg = err.response?.data?.detail || err.response?.data?.message || '';
-      console.log('Error message:', errorMsg);
       
       // Используем сообщение об ошибке как есть, без дополнительной обработки
       setError(errorMsg || 'Не удалось забронировать столик. Пожалуйста, попробуйте позже.');
@@ -234,27 +316,20 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
     onSuccess();
   };
 
-  // Generate time slots from 12:00 to 23:00 with appropriate filtering for same-day reservations
-  const timeSlots = (() => {
-    // Get basic time slots
-    let slots = Array.from({ length: 12 }, (_, i) => {
-      const hour = i + 12;
-      return hour < 24 ? `${hour}:00` : null;
-    }).filter(Boolean) as string[];
+  // Format end time properly
+  const getFormattedEndTime = () => {
+    if (!formData.reservation_time) return "";
     
-    // If today's date is selected, filter out times up to and including current hour
-    if (formData.reservation_date === new Date().toISOString().split('T')[0]) {
-      const now = new Date();
-      const currentHour = now.getHours();
-      
-      slots = slots.filter(timeSlot => {
-        const [hour] = timeSlot.split(':').map(Number);
-        return hour > currentHour;
-      });
-    }
+    // Parse hour from reservation time, ensuring we get a valid number
+    const timeParts = formData.reservation_time.split(':');
+    if (timeParts.length < 1) return "";
     
-    return slots;
-  })();
+    const startHour = parseInt(timeParts[0], 10);
+    if (isNaN(startHour)) return "";
+    
+    const endHour = startHour + formData.duration;
+    return `${endHour}:00`;
+  };
 
   if (showMenuModal && newReservationId) {
     return (
@@ -330,13 +405,46 @@ const ReservationModal: React.FC<ReservationModalProps> = ({
                     onChange={handleChange}
                     className="w-full border rounded px-3 py-2 mt-1"
                     required
+                    disabled={timeSlots.length === 0}
                   >
-                    {timeSlots.map((time) => (
-                      <option key={time} value={time}>
-                        {time}
+                    {timeSlots.length > 0 ? (
+                      timeSlots.map((time) => (
+                        <option key={time} value={time}>
+                          {time}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">Нет доступных слотов</option>
+                    )}
+                  </select>
+                </label>
+              </div>
+              
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-2">
+                  Продолжительность
+                  <select
+                    name="duration"
+                    value={formData.duration}
+                    onChange={handleChange}
+                    className="w-full border rounded px-3 py-2 mt-1"
+                    required
+                  >
+                    {[1, 2, 3, 4, 5, 6].map((hours) => (
+                      <option key={hours} value={hours}>
+                        {hours} {hours === 1 ? 'час' : hours < 5 ? 'часа' : 'часов'}
                       </option>
                     ))}
                   </select>
+                  {timeSlots.length > 0 && formData.reservation_time ? (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Конец брони: {getFormattedEndTime()}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Выберите доступное время для отображения времени окончания
+                    </div>
+                  )}
                 </label>
               </div>
               

@@ -7,12 +7,94 @@ from utils.security import get_current_user, get_current_admin
 from schemas.layout import (
     Layout, EnhancedLayout, LayoutUpdate, TableCreate, TableRead, TableFullRead,
     StaticItemCreate, StaticItemRead, WallCreate, WallRead,
-    TableTypeCreate, TableTypeRead
+    TableTypeCreate, TableTypeRead, RoomCreate, RoomRead
 )
 from .services import get_layout, save_layout, add_table, add_static_item, add_wall, clear_layout
-from db.models import User, TableType
+from db.models import User, TableType, Room
+from datetime import datetime
 
 router = APIRouter()
+
+
+# Room Management Endpoints
+@router.get("/rooms", response_model=List[RoomRead])
+def get_rooms(
+    session: Session = Depends(get_session)
+):
+    """Get all rooms"""
+    return session.exec(select(Room)).all()
+
+
+@router.get("/rooms/{room_id}", response_model=RoomRead)
+def get_room(
+    room_id: UUID,
+    session: Session = Depends(get_session)
+):
+    """Get a specific room by ID"""
+    room = session.get(Room, room_id)
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Room not found"
+        )
+    return room
+
+
+@router.post("/rooms", response_model=RoomRead)
+def create_room(
+    room: RoomCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin)
+):
+    """Create a new room (admin only)"""
+    # Check if room with same name already exists
+    existing = session.exec(select(Room).where(Room.name == room.name)).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Room with name '{room.name}' already exists"
+        )
+    
+    new_room = Room(**room.dict())
+    session.add(new_room)
+    session.commit()
+    session.refresh(new_room)
+    return new_room
+
+
+@router.put("/rooms/{room_id}", response_model=RoomRead)
+def update_room(
+    room_id: UUID,
+    room: RoomCreate,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_admin)
+):
+    """Update an existing room (admin only)"""
+    db_room = session.get(Room, room_id)
+    if not db_room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Room not found"
+        )
+    
+    # Check if another room with the same name exists
+    if db_room.name != room.name:
+        existing = session.exec(select(Room).where(Room.name == room.name)).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Room with name '{room.name}' already exists"
+            )
+    
+    # Update room fields
+    db_room.name = room.name
+    db_room.description = room.description
+    db_room.updated_at = datetime.now()
+    
+    session.add(db_room)
+    session.commit()
+    session.refresh(db_room)
+    return db_room
 
 
 @router.get("/", response_model=Layout)

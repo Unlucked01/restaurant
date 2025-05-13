@@ -18,7 +18,7 @@ MAX_DAYS_ADVANCE = 14
 BANQUET_HALL_TYPE_ID = 5
 
 
-def get_available_tables(query_date: date, query_time: time = None, session: Session = None):
+def get_available_tables(query_date: date, query_time: time = None, duration: int = 1, session: Session = None):
     # Validate date is within allowed range
     today = date.today()
     max_date = today + timedelta(days=MAX_DAYS_ADVANCE)
@@ -35,6 +35,19 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
             detail=f"Бронирование возможно только до {max_date}"
         )
     
+    # Validate duration
+    if duration < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Минимальная продолжительность бронирования - 1 час"
+        )
+    
+    if duration > 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Максимальная продолжительность бронирования - 6 часов"
+        )
+    
     # Get all active tables
     tables = session.exec(select(Table).where(Table.is_active == True)).all()
     
@@ -46,6 +59,14 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
         is_banquet_hall = table.type_id == BANQUET_HALL_TYPE_ID
         
         if query_time:
+            # Calculate end time based on duration
+            start_hour = query_time.hour
+            end_hour = min(start_hour + duration, CLOSING_HOUR + 1)  # +1 because end_hour is exclusive
+            
+            # Check if requested duration spans beyond closing time
+            if end_hour > CLOSING_HOUR + 1:
+                continue  # Skip this table as it can't accommodate the requested duration
+            
             # For banquet halls, check if any reservation exists on that day
             if is_banquet_hall:
                 existing_reservation = session.exec(
@@ -57,23 +78,41 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
                     )
                 ).first()
             else:
-                # Regular tables: check specific time availability
-                existing_reservation = session.exec(
+                # For regular tables: check if any reservations overlap with the requested time range
+                existing_reservations = session.exec(
                     select(Reservation).where(
                         and_(
                             Reservation.table_id == table.id,
-                            Reservation.reservation_date == query_date,
-                            Reservation.reservation_time == query_time
+                            Reservation.reservation_date == query_date
                         )
                     )
-                ).first()
+                ).all()
+                
+                # Check for time slot conflicts
+                has_conflict = False
+                for existing in existing_reservations:
+                    existing_start_hour = existing.reservation_time.hour
+                    existing_end_hour = existing_start_hour + existing.duration
+                    
+                    # Check if there's an overlap between requested and existing time slots
+                    if (start_hour < existing_end_hour and end_hour > existing_start_hour):
+                        has_conflict = True
+                        break
+                
+                existing_reservation = None if not has_conflict else True
+            
+            # Create a list with just the requested time if it's available
+            available_times = None
+            if existing_reservation is None:  # If the time slot is available
+                available_times = [query_time]
             
             availability.append(
                 TableAvailability(
                     table_id=table.id,
                     type_id=table.type_id,
                     table_number=table.table_number,
-                    available=existing_reservation is None
+                    available=existing_reservation is None,
+                    available_times=available_times
                 )
             )
         else:
@@ -111,6 +150,9 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
                         current_hour = now.hour
                         available_times = [t for t in available_times if t.hour > current_hour]
                     
+                    # Filter out time slots that can't accommodate the requested duration
+                    available_times = [t for t in available_times if t.hour + duration <= CLOSING_HOUR + 1]
+                    
                     availability.append(
                         TableAvailability(
                             table_id=table.id,
@@ -121,7 +163,7 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
                         )
                     )
             else:
-                # For regular tables, check each time slot
+                # For regular tables, check each time slot with duration
                 existing_reservations = session.exec(
                     select(Reservation).where(
                         and_(
@@ -131,8 +173,29 @@ def get_available_tables(query_date: date, query_time: time = None, session: Ses
                     )
                 ).all()
                 
-                reserved_times = {r.reservation_time for r in existing_reservations}
-                available_times = [t for t in TIME_SLOTS if t not in reserved_times]
+                # Calculate all available time slots considering duration
+                available_times = []
+                for potential_start in TIME_SLOTS:
+                    start_hour = potential_start.hour
+                    end_hour = start_hour + duration
+                    
+                    # Skip if this time slot extends beyond closing time
+                    if end_hour > CLOSING_HOUR + 1:
+                        continue
+                    
+                    # Check for conflicts with existing reservations
+                    has_conflict = False
+                    for existing in existing_reservations:
+                        existing_start_hour = existing.reservation_time.hour
+                        existing_end_hour = existing_start_hour + existing.duration
+                        
+                        # Check for overlap
+                        if (start_hour < existing_end_hour and end_hour > existing_start_hour):
+                            has_conflict = True
+                            break
+                    
+                    if not has_conflict:
+                        available_times.append(potential_start)
                 
                 # For same-day reservations, filter out time slots up to and including current hour
                 if query_date == today:
@@ -168,6 +231,26 @@ def create_reservation(reservation_data: ReservationCreate, user_id: UUID, sessi
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Бронирование возможно только до {max_date}"
+        )
+    
+    # Validate duration
+    if reservation_data.duration < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Минимальная продолжительность бронирования - 1 час"
+        )
+    
+    if reservation_data.duration > 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Максимальная продолжительность бронирования - 6 часов"
+        )
+    
+    # Check if reservation extends beyond closing time
+    if reservation_data.reservation_time.hour + reservation_data.duration > CLOSING_HOUR + 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Время бронирования выходит за пределы рабочих часов (до {CLOSING_HOUR}:00)"
         )
     
     # For same-day reservations, check if time is after the current hour
@@ -232,22 +315,31 @@ def create_reservation(reservation_data: ReservationCreate, user_id: UUID, sessi
                 detail="Банкетный зал уже забронирован на эту дату"
             )
     else:
-        # For regular tables, check specific time slot availability
-        existing_reservation = session.exec(
+        # For regular tables, check for conflicts with existing reservations
+        existing_reservations = session.exec(
             select(Reservation).where(
                 and_(
                     Reservation.table_id == reservation_data.table_id,
-                    Reservation.reservation_date == reservation_data.reservation_date,
-                    Reservation.reservation_time == reservation_data.reservation_time
+                    Reservation.reservation_date == reservation_data.reservation_date
                 )
             )
-        ).first()
+        ).all()
         
-        if existing_reservation:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Столик уже занят в это время"
-            )
+        # Calculate requested time slot
+        start_hour = reservation_data.reservation_time.hour
+        end_hour = start_hour + reservation_data.duration
+        
+        # Check for conflicts with any existing reservation
+        for existing in existing_reservations:
+            existing_start_hour = existing.reservation_time.hour
+            existing_end_hour = existing_start_hour + existing.duration
+            
+            # Check for overlap between requested and existing time slots
+            if (start_hour < existing_end_hour and end_hour > existing_start_hour):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Столик уже занят в это время или выбранная продолжительность конфликтует с существующим бронированием"
+                )
     
     # Create reservation
     new_reservation = Reservation(
@@ -255,6 +347,7 @@ def create_reservation(reservation_data: ReservationCreate, user_id: UUID, sessi
         table_id=reservation_data.table_id,
         reservation_date=reservation_data.reservation_date,
         reservation_time=reservation_data.reservation_time,
+        duration=reservation_data.duration,
         guests_count=reservation_data.guests_count,
         first_name=reservation_data.first_name,
         last_name=reservation_data.last_name,
@@ -339,11 +432,16 @@ def get_reservation_statistics(period: str, session: Session):
     total_guests = sum(r.guests_count for r in reservations)
     average_guests = total_guests / total_reservations if total_reservations > 0 else 0
     
+    # Average duration of reservations
+    total_duration = sum(r.duration for r in reservations)
+    average_duration = total_duration / total_reservations if total_reservations > 0 else 0
+    
     return {
         "total_reservations": total_reservations,
         "reservations_by_date": reservations_by_date,
         "reservations_by_table": reservations_by_table,
-        "average_guests": round(average_guests, 1)
+        "average_guests": round(average_guests, 1),
+        "average_duration": round(average_duration, 1)
     }
 
 

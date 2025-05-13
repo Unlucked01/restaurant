@@ -49,25 +49,48 @@ export const authAPI = {
 
 // Layout API
 export const layoutAPI = {
-  getLayout: () => api.get('/layout/'),
-  saveLayout: (layoutData: any) => api.post('/layout/save', layoutData),
+  getLayout: (roomId?: string) => api.get('/layout/', { params: { room_id: roomId } }),
+  saveLayout: (layoutData: any, roomId?: string) => api.post('/layout/save', layoutData, { params: { room_id: roomId } }),
   getTableTypes: () => api.get('/layout/table-types'),
-  addTable: (tableData: any) => api.post('/layout/tables', tableData),
-  addStaticItem: (itemData: any) => api.post('/layout/static-items', itemData),
-  addWall: async (wallData: any) => {
-    const response = await api.post('/layout/walls', wallData);
+  addTable: (tableData: any, roomId?: string) => api.post('/layout/tables', tableData, { params: { room_id: roomId } }),
+  addStaticItem: (itemData: any, roomId?: string) => api.post('/layout/static-items', itemData, { params: { room_id: roomId } }),
+  addWall: async (wallData: any, roomId?: string) => {
+    const response = await api.post('/layout/walls', wallData, { params: { room_id: roomId } });
     return response;
   },
-  clearLayout: async () => {
-    const response = await api.post('/layout/clear');
+  clearLayout: async (roomId?: string) => {
+    const response = await api.post('/layout/clear', {}, { params: { room_id: roomId } });
     return response;
   },
+  getRooms: () => api.get('/layout/rooms'),
+  getRoom: (roomId: string) => api.get(`/layout/rooms/${roomId}`),
+  createRoom: (roomData: any) => api.post('/layout/rooms', roomData),
+  updateRoom: (roomId: string, roomData: any) => api.put(`/layout/rooms/${roomId}`, roomData),
+  getOrCreateDefaultRoom: async () => {
+    try {
+      const { data: rooms } = await api.get('/layout/rooms');
+      
+      if (rooms && rooms.length > 0) {
+        return rooms[0];
+      }
+      
+      const { data: newRoom } = await api.post('/layout/rooms', {
+        name: 'Основной зал',
+        description: 'Дефолтный зал ресторана'
+      });
+      
+      return newRoom;
+    } catch (error) {
+      console.error('Ошибка при получении или создании дефолтной комнаты:', error);
+      throw error;
+    }
+  }
 };
 
 // Reservations API
 export const reservationsAPI = {
-  getAvailability: (date: string, time?: string) => 
-    api.get('/reserve/availability', { params: { date, time } }),
+  getAvailability: (date: string, time?: string, duration: number = 1) => 
+    api.get('/reserve/availability', { params: { date, time, duration } }),
   createReservation: (reservationData: any) => api.post('/reserve', reservationData),
   getMyReservations: () => api.get('/reserve/my'),
   getAllReservations: (date: string) => api.get('/reserve', { params: { date } }),

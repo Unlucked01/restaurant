@@ -22,13 +22,9 @@ export default function Home() {
   const [maxGuests, setMaxGuests] = useState(4);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState(() => {
-    // Get the next available hour for today
     const now = new Date();
     const currentHour = now.getHours();
-    // If it's after 23:00, default to 12:00 (for the next day)
-    // Otherwise, use the next hour after current hour (if available)
     const nextHour = currentHour >= 23 ? 12 : currentHour + 1;
-    // Only use times between 12 and 23
     return nextHour >= 12 && nextHour < 24 ? `${nextHour}:00` : '12:00';
   });
   const [tableSizes, setTableSizes] = useState<Record<string, { width: number; height: number }>>(
@@ -39,19 +35,39 @@ export default function Home() {
   const [modalKey, setModalKey] = useState(0);
   const [scale, setScale] = useState(1);
   const layoutContainerRef = useRef(null);
+  
+  // Добавляем состояние для комнаты
+  const [activeRoom, setActiveRoom] = useState<any>(null);
 
   const router = useRouter();
   const { user } = useAuth();
 
   useEffect(() => {
-    fetchLayout();
+    initializeRoomAndLayout();
   }, []);
 
   useEffect(() => {
-    if (date && time) {
+    if (date && time && activeRoom) {
       fetchAvailability();
     }
-  }, [date, time]);
+  }, [date, time, activeRoom]);
+
+  // Новая функция для инициализации комнаты и макета
+  const initializeRoomAndLayout = async () => {
+    try {
+      setLoading(true);
+      // Получаем или создаем дефолтную комнату
+      const defaultRoom = await layoutAPI.getOrCreateDefaultRoom();
+      console.log('Default room:', defaultRoom);
+      setActiveRoom(defaultRoom);
+      
+      // Загружаем макет для этой комнаты
+      await fetchLayout(defaultRoom.id);
+    } catch (err) {
+      console.error('Failed to initialize room and layout:', err);
+      setError('Не удалось загрузить план зала. Пожалуйста, попробуйте позже.');
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -71,11 +87,11 @@ export default function Home() {
     };
   }, []);
 
-  const fetchLayout = async () => {
+  const fetchLayout = async (roomId?: string) => {
     try {
       setLoading(true);
       setError(null);
-      const { data } = await layoutAPI.getLayout();
+      const { data } = await layoutAPI.getLayout(roomId);
       
       // Extract tables, static items, and walls from the layout data
       const { tables = [], static_items = [], walls = [] } = data;
@@ -163,6 +179,49 @@ export default function Home() {
   const handleTimeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setTime(e.target.value);
   };
+
+  // Move to next day when no time slots available
+  const moveToNextDay = () => {
+    const currentDate = new Date(date);
+    currentDate.setDate(currentDate.getDate() + 1);
+    const nextDay = currentDate.toISOString().split('T')[0];
+    setDate(nextDay);
+    setTime('12:00'); // Reset to earliest time
+  };
+
+  // Generate time slots for the current date
+  const getTimeSlots = () => {
+    // Generate time slots from 12:00 to 23:00
+    let timeSlots = Array.from({ length: 12 }, (_, i) => {
+      const hour = i + 12;
+      return hour < 24 ? `${hour}:00` : null;
+    }).filter(Boolean);
+    
+    // Filter out times up to and including current hour for same-day reservations
+    if (date === new Date().toISOString().split('T')[0]) {
+      const now = new Date();
+      const currentHour = now.getHours();
+      
+      timeSlots = timeSlots.filter(timeSlot => {
+        const [hour] = timeSlot.split(':').map(Number);
+        return hour > currentHour;
+      });
+    }
+    
+    return timeSlots;
+  };
+
+  // Check if current time slots are empty and move to next day if necessary
+  useEffect(() => {
+    const timeSlots = getTimeSlots();
+    
+    if (timeSlots.length === 0) {
+      moveToNextDay();
+    } else if (!timeSlots.includes(time) && timeSlots.length > 0) {
+      // If current time is no longer valid, select the first available time
+      setTime(timeSlots[0]);
+    }
+  }, [date]);
 
   const handleTableClick = (tableId: string, maxGuests: number) => {
     if (!user) {
@@ -334,30 +393,11 @@ export default function Home() {
                     onChange={handleTimeChange}
                     className="border rounded px-3 py-2"
                   >
-                    {(() => {
-                      // Generate time slots from 12:00 to 23:00
-                      let timeSlots = Array.from({ length: 12 }, (_, i) => {
-                        const hour = i + 12;
-                        return hour < 24 ? `${hour}:00` : null;
-                      }).filter(Boolean);
-                      
-                      // Filter out times up to and including current hour for same-day reservations
-                      if (date === new Date().toISOString().split('T')[0]) {
-                        const now = new Date();
-                        const currentHour = now.getHours();
-                        
-                        timeSlots = timeSlots.filter(timeSlot => {
-                          const [hour] = timeSlot.split(':').map(Number);
-                          return hour > currentHour;
-                        });
-                      }
-                      
-                      return timeSlots.map((timeSlot) => (
-                        <option key={timeSlot} value={timeSlot}>
-                          {timeSlot}
-                        </option>
-                      ));
-                    })()}
+                    {getTimeSlots().map((timeSlot) => (
+                      <option key={timeSlot} value={timeSlot}>
+                        {timeSlot}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
