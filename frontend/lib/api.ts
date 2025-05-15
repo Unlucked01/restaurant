@@ -73,15 +73,8 @@ export const layoutAPI = {
       if (rooms && rooms.length > 0) {
         return rooms[0];
       }
-      
-      const { data: newRoom } = await api.post('/layout/rooms', {
-        name: 'Основной зал',
-        description: 'Дефолтный зал ресторана'
-      });
-      
-      return newRoom;
     } catch (error) {
-      console.error('Ошибка при получении или создании дефолтной комнаты:', error);
+      console.error('Ошибка при получении дефолтной комнаты:', error);
       throw error;
     }
   }

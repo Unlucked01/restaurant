@@ -37,6 +37,7 @@ from auth.services import register_user, login_user
 from utils.security import get_current_user, oauth2_scheme
 
 from db.init_table_types import init_table_types
+from db.create_default_room import create_default_room
 
 auth_router = APIRouter()
 
@@ -121,6 +122,7 @@ def on_startup():
     logger.info("Initializing database...")
     create_db_and_tables()
     init_table_types()
+    create_default_room()
 
 
 if __name__ == "__main__":

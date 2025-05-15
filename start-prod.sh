@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+docker-compose -f docker-compose.prod.no-nginx.yml down
+# docker volume rm restaurant_postgres_data
+
 # Проверяем и создаем необходимые директории
 mkdir -p backend/uploads
 

@@ -12,19 +12,32 @@ from schemas.layout import (
 from .services import get_layout, save_layout, add_table, add_static_item, add_wall, clear_layout
 from db.models import User, TableType, Room
 from datetime import datetime
+from db.create_default_room import create_default_room
 
-router = APIRouter(prefix="/layout", tags=["layout"])
+router = APIRouter(tags=["layout"])
 
 # Room Management Endpoints
 @router.get("/rooms", response_model=List[RoomRead])
 def get_rooms(session: Session = Depends(get_session)):
-    return session.exec(select(Room)).all()
+    rooms = session.exec(select(Room)).all()
+    if not rooms:
+        # Create a default room if none exists
+        default_room = create_default_room()
+        if default_room:
+            rooms = [default_room]
+    return rooms
 
 @router.get("/rooms/{room_id}", response_model=RoomRead)
 def get_room(room_id: UUID, session: Session = Depends(get_session)):
     room = session.get(Room, room_id)
     if not room:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+        # Try to get any room first
+        room = session.exec(select(Room)).first()
+        if not room:
+            # Create a default room if none exists
+            room = create_default_room()
+            if not room:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found and couldn't create default room")
     return room
 
 @router.post("/rooms", response_model=RoomRead)
