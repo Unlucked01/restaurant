@@ -310,8 +310,7 @@ export default function Home() {
                     <ClockIcon className="h-6 w-6 mr-2 text-blue-600 flex-shrink-0" />
                     <div>
                       <h3 className="font-semibold">Часы работы</h3>
-                      <p>Понедельник - Четверг: 12:00 - 23:00</p>
-                      <p>Пятница - Воскресенье: 12:00 - 00:00</p>
+                      <p>Каждый день: 12:00 - 24:00</p>
                     </div>
                   </div>
                   

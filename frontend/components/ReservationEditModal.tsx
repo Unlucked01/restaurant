@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { reservationsAPI } from '../lib/api';
 import { formatPhoneNumber, normalizePhoneNumber, isValidPhoneNumber } from '../lib/formatters';
 import { isValidName, VALIDATION_ERRORS } from '../lib/validation';
+import { renderTableByType } from './TableStyles';
 
 interface ReservationEditModalProps {
   reservationId: string;
@@ -22,6 +23,7 @@ const ReservationEditModal: React.FC<ReservationEditModalProps> = ({
     phone: '',
     reservation_date: new Date().toISOString().split('T')[0],
     reservation_time: '12:00',
+    duration: 1,
   });
 
   const [loading, setLoading] = useState(false);
@@ -31,6 +33,7 @@ const ReservationEditModal: React.FC<ReservationEditModalProps> = ({
   const [lastNameError, setLastNameError] = useState<string | null>(null);
   const [tables, setTables] = useState<any[]>([]);
   const [maxGuests, setMaxGuests] = useState(4);
+  const [selectedTable, setSelectedTable] = useState<any>(null);
 
   useEffect(() => {
     fetchReservationDetails();
@@ -54,21 +57,39 @@ const ReservationEditModal: React.FC<ReservationEditModalProps> = ({
       
       // Find the selected table
       const selectedTable = tables.find(table => table.table_id === reservation.table_id);
-      let minGuests = 1;
       
-      if (selectedTable && selectedTable.table_type) {
-        setMaxGuests(selectedTable.table_type.default_max_guests);
-        minGuests = Math.ceil(selectedTable.table_type.default_max_guests / 2);
+      // Determine max guests based on table type
+      let tableMaxGuests = 4; // Default
+      
+      // Correctly get max guests from the table data
+      if (reservation.table && reservation.table.table_type) {
+        tableMaxGuests = reservation.table.table_type.default_max_guests;
+        console.log("Setting max guests from reservation.table.table_type:", tableMaxGuests);
+      } else if (selectedTable && selectedTable.table_type) {
+        tableMaxGuests = selectedTable.table_type.default_max_guests;
+        console.log("Setting max guests from selectedTable.table_type:", tableMaxGuests);
+      } else if (reservation.table && reservation.table.type_id) {
+        // Fallback based on type_id
+        tableMaxGuests = reservation.table.type_id === 4 ? 10 : 
+                         reservation.table.type_id === 5 ? 16 : 4;
+        console.log("Setting max guests based on type_id:", tableMaxGuests);
       }
+      
+      console.log("Final tableMaxGuests:", tableMaxGuests);
+      setMaxGuests(tableMaxGuests);
+      
+      // Save selected table
+      setSelectedTable(reservation.table || selectedTable);
       
       setFormData({
         table_id: reservation.table_id,
-        guests_count: Math.max(Number(reservation.guests_count), minGuests),
+        guests_count: Number(reservation.guests_count),
         first_name: reservation.first_name,
         last_name: reservation.last_name,
         phone: normalizedPhone,
         reservation_date: reservation.reservation_date,
         reservation_time: reservation.reservation_time.substring(0, 5),
+        duration: reservation.duration || 1,
       });
     } catch (err) {
       console.error('Failed to fetch reservation details:', err);
@@ -142,21 +163,23 @@ const ReservationEditModal: React.FC<ReservationEditModalProps> = ({
     } else if (name === 'table_id') {
       // Find the selected table to get max guests
       const selectedTable = tables.find(table => table.table_id === value);
-      let newMaxGuests = maxGuests;
       
-      if (selectedTable && selectedTable.table_type) {
-        newMaxGuests = selectedTable.table_type.default_max_guests;
-        setMaxGuests(newMaxGuests);
+      if (selectedTable) {
+        setSelectedTable(selectedTable);
+        if (selectedTable.table_type) {
+          setMaxGuests(selectedTable.table_type.default_max_guests);
+        }
       }
-      
-      // Calculate minimum guests for this table
-      const minGuests = Math.ceil(newMaxGuests / 2);
       
       setFormData((prev) => ({
         ...prev,
         [name]: value,
-        // If current guests count is less than minimum, update it
-        guests_count: prev.guests_count < minGuests ? minGuests : prev.guests_count,
+      }));
+    } else if (name === 'duration') {
+      // Store duration as a number
+      setFormData((prev) => ({
+        ...prev,
+        [name]: parseInt(value, 10),
       }));
     } else if (name === 'reservation_date') {
       // Обновляем дату
@@ -258,6 +281,16 @@ const ReservationEditModal: React.FC<ReservationEditModalProps> = ({
     return slots;
   })();
 
+  // Function to get formatted end time
+  const getFormattedEndTime = () => {
+    if (!formData.reservation_time) return '';
+    
+    const [hours, minutes] = formData.reservation_time.split(':').map(Number);
+    const endHour = (hours + formData.duration) % 24;
+    return `${endHour}:${minutes.toString().padStart(2, '0')}`;
+  };
+
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-md">
@@ -272,26 +305,6 @@ const ReservationEditModal: React.FC<ReservationEditModalProps> = ({
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block text-gray-700 mb-2">
-              Столик
-              <select
-                name="table_id"
-                value={formData.table_id}
-                onChange={handleChange}
-                className="w-full border rounded px-3 py-2 mt-1"
-                required
-              >
-                <option value="">Выберите столик</option>
-                {tables.map((table) => (
-                  <option key={table.table_id} value={table.table_id}>
-                    Столик №{table.table_number}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          
-          <div className="mb-4">
-            <label className="block text-gray-700 mb-2">
               Количество гостей
               <select
                 name="guests_count"
@@ -300,14 +313,21 @@ const ReservationEditModal: React.FC<ReservationEditModalProps> = ({
                 className="w-full border rounded px-3 py-2 mt-1"
                 required
               >
-                {Array.from(
-                  { length: maxGuests - Math.ceil(maxGuests / 2) + 1 }, 
-                  (_, i) => i + Math.ceil(maxGuests / 2)
-                ).map((num) => (
-                  <option key={num} value={num}>
-                    {num}
-                  </option>
-                ))}
+                {(() => {
+                  console.log("Generating guest options with maxGuests:", maxGuests);
+                  const minGuests = Math.max(1, Math.ceil(maxGuests / 2));
+                  const options = [];
+                  
+                  for (let i = minGuests; i <= maxGuests; i++) {
+                    options.push(
+                      <option key={i} value={i}>
+                        {i}
+                      </option>
+                    );
+                  }
+                  
+                  return options;
+                })()}
               </select>
             </label>
           </div>
@@ -344,6 +364,30 @@ const ReservationEditModal: React.FC<ReservationEditModalProps> = ({
                   </option>
                 ))}
               </select>
+            </label>
+          </div>
+          
+          <div className="mb-4">
+            <label className="block text-gray-700 mb-2">
+              Продолжительность
+              <select
+                name="duration"
+                value={formData.duration}
+                onChange={handleChange}
+                className="w-full border rounded px-3 py-2 mt-1"
+                required
+              >
+                {[1, 2, 3, 4, 5, 6].map((hours) => (
+                  <option key={hours} value={hours}>
+                    {hours} {hours === 1 ? 'час' : hours < 5 ? 'часа' : 'часов'}
+                  </option>
+                ))}
+              </select>
+              {formData.reservation_time && (
+                <div className="text-xs text-gray-500 mt-1">
+                  Конец брони: {getFormattedEndTime()}
+                </div>
+              )}
             </label>
           </div>
           

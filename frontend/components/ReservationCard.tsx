@@ -34,6 +34,7 @@ interface ReservationCardProps {
     table_name?: string;
     total_price?: number;
     status?: string;
+    duration?: number;
   };
   tableNameMap?: Record<string, string>;
   onDelete?: (id: string) => void;
@@ -238,6 +239,11 @@ const ReservationCard: React.FC<ReservationCardProps> = ({
                   
                   <div className="text-gray-600">Время:</div>
                   <div className="font-medium">{reservation.reservation_time.substring(0, 5)}</div>
+                  
+                  <div className="text-gray-600">Длительность:</div>
+                  <div className="font-medium">{reservation.duration} 
+                    {reservation.duration === 1 ? 'час' : 
+                    reservation.duration < 5 ? ' часа' : ' часов'}</div>
                   
                   <div className="text-gray-600">Количество гостей:</div>
                   <div className="font-medium">{reservation.guests_count}</div>

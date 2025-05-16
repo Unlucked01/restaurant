@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { reservationsAPI, menuAPI } from '../lib/api';
 import { format } from 'date-fns';
+import ReservationEditModal from './ReservationEditModal';
 import { 
   Chart as ChartJS, 
   ArcElement, 
@@ -51,6 +52,7 @@ const ReservationsManager: React.FC = () => {
   const [orderStats, setOrderStats] = useState<OrderStats | null>(null);
   const [statsPeriod, setStatsPeriod] = useState<string>('week');
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
+  const [editingReservationId, setEditingReservationId] = useState<string | null>(null);
   
   // Fetch reservations for selected date
   useEffect(() => {
@@ -265,8 +267,32 @@ const ReservationsManager: React.FC = () => {
     }
   };
 
+  // Handle refresh reservations after edit
+  const handleReservationUpdated = async () => {
+    try {
+      // Close the edit modal
+      setEditingReservationId(null);
+      
+      // Refresh reservations list
+      const response = await reservationsAPI.getAllReservations(selectedDate);
+      setReservations(response.data);
+    } catch (err) {
+      console.error('Failed to refresh reservations:', err);
+      setError('Не удалось обновить список бронирований');
+    }
+  };
+
   return (
     <div className="reservations-manager">
+      {/* Show edit modal when a reservation is being edited */}
+      {editingReservationId && (
+        <ReservationEditModal
+          reservationId={editingReservationId}
+          onClose={() => setEditingReservationId(null)}
+          onSuccess={handleReservationUpdated}
+        />
+      )}
+
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 flex justify-between items-center">
           <span>{error}</span>
@@ -457,12 +483,10 @@ const ReservationsManager: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {reservation.reservation_time}
-                      {reservation.duration && (
-                        <span className="ml-1 text-xs text-gray-500">
-                          ({reservation.duration} {reservation.duration === 1 ? 'час' : 
-                           reservation.duration < 5 ? 'часа' : 'часов'})
-                        </span>
-                      )}
+                      <span className="ml-1 text-xs text-gray-500">
+                        ({reservation.duration || 1} {(reservation.duration || 1) === 1 ? 'час' : 
+                         (reservation.duration || 1) < 5 ? 'часа' : 'часов'})
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {reservation.guests_count}
@@ -495,8 +519,8 @@ const ReservationsManager: React.FC = () => {
                           className="p-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                           title="Редактировать"
                           onClick={() => {
-                            // Handle edit
-                            alert('Редактирование бронирования ' + reservation.id);
+                            // Show edit modal
+                            setEditingReservationId(reservation.id);
                           }}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

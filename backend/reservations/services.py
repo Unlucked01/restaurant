@@ -463,6 +463,7 @@ def get_user_reservations(user_id: UUID, session: Session):
             "table_id": str(reservation.table_id),
             "reservation_date": reservation.reservation_date,
             "reservation_time": reservation.reservation_time,
+            "duration": reservation.duration,
             "guests_count": reservation.guests_count,
             "first_name": reservation.first_name,
             "last_name": reservation.last_name,
@@ -520,6 +521,7 @@ def get_reservation_by_id(reservation_id: UUID, session: Session):
         "table_id": str(reservation.table_id),
         "reservation_date": reservation.reservation_date,
         "reservation_time": reservation.reservation_time,
+        "duration": reservation.duration,
         "guests_count": reservation.guests_count,
         "first_name": reservation.first_name,
         "last_name": reservation.last_name,
@@ -670,6 +672,7 @@ def update_reservation(reservation_id: UUID, updated_data: ReservationCreate, se
     reservation.table_id = updated_data.table_id
     reservation.reservation_date = updated_data.reservation_date
     reservation.reservation_time = updated_data.reservation_time
+    reservation.duration = updated_data.duration
     reservation.guests_count = updated_data.guests_count
     reservation.first_name = updated_data.first_name
     reservation.last_name = updated_data.last_name
@@ -686,6 +689,7 @@ def update_reservation(reservation_id: UUID, updated_data: ReservationCreate, se
         "table_id": str(reservation.table_id),
         "reservation_date": reservation.reservation_date,
         "reservation_time": reservation.reservation_time,
+        "duration": reservation.duration,
         "guests_count": reservation.guests_count,
         "first_name": reservation.first_name,
         "last_name": reservation.last_name,
@@ -749,6 +753,7 @@ def update_reservation_status(reservation_id: UUID, status: str, session: Sessio
         "table_id": str(reservation.table_id),
         "reservation_date": reservation.reservation_date,
         "reservation_time": reservation.reservation_time,
+        "duration": reservation.duration,
         "guests_count": reservation.guests_count,
         "first_name": reservation.first_name,
         "last_name": reservation.last_name,

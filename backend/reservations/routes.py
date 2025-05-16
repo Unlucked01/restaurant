@@ -80,6 +80,7 @@ def get_reservations(
                     "table_id": str(reservation.table_id),
                     "reservation_date": reservation.reservation_date,
                     "reservation_time": reservation.reservation_time,
+                    "duration": reservation.duration,
                     "guests_count": reservation.guests_count,
                     "first_name": reservation.first_name,
                     "last_name": reservation.last_name,
@@ -209,9 +210,9 @@ def update_reservation_details(
     updated = update_reservation(reservation_id, updated_data, session)
     
     # Load the table for enhanced details
-    table = session.get(Table, updated.table_id)
+    table = session.get(Table, updated["table_id"])
     if table:
-        updated.table = table
+        updated["table"] = table
     
     return updated
 
